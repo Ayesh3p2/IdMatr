@@ -20,21 +20,53 @@ export class AppService {
   async calculateRisk(targetId: string, targetType: string) {
     this.logger.log(`Calculating risk for ${targetType}: ${targetId}`);
     
-    // In a real system, this would analyze many factors
-    // For now, let's simulate a calculation
-    const score = Math.floor(Math.random() * 100);
+    // Fetch user's risk events from DB
+    const events = await this.prisma.riskEvent.findMany({
+      where: { targetId },
+    });
+
+    // Severity weights
+    const weights = {
+      critical: 40,
+      high: 20,
+      medium: 10,
+      low: 5,
+    };
+
+    let totalScore = 0;
+    let latestEventDate: Date | null = null;
+
+    events.forEach(event => {
+      const severity = (event.severity?.toLowerCase() || 'low') as keyof typeof weights;
+      totalScore += weights[severity] || weights.low;
+      
+      if (!latestEventDate || event.timestamp > latestEventDate) {
+        latestEventDate = event.timestamp;
+      }
+    });
+
+    // Time decay: 2 points per day since last event
+    if (latestEventDate) {
+      const now = new Date();
+      const diffTime = Math.abs(now.getTime() - latestEventDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      totalScore = Math.max(0, totalScore - (diffDays * 2));
+    }
+
+    // Cap at 100
+    const finalScore = Math.min(100, totalScore);
     
     return this.prisma.riskProfile.upsert({
       where: { targetId },
       update: {
-        currentScore: score,
+        currentScore: finalScore,
         lastUpdated: new Date(),
       },
       create: {
         targetId,
         targetType,
         baseScore: 50,
-        currentScore: score,
+        currentScore: finalScore,
       },
     });
   }

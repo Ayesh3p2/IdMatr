@@ -30,7 +30,7 @@ export class AppService {
     // Save results to database
     for (const item of results) {
       await this.prisma.discoveredApp.upsert({
-        where: { id: item.app }, // Simple mapping for simulation
+        where: { name: item.app }, 
         update: {
           lastDetected: new Date(),
           status: 'identified',

@@ -25,8 +25,39 @@ export class AppService {
   }
 
   async getLogs(filters: any) {
+    this.logger.log(`Fetching audit logs with filters: ${JSON.stringify(filters)}`);
+    
+    // Explicit filter construction to prevent injection/unexpected behavior
+    const where: any = {};
+    
+    if (filters?.actorId) {
+      where.actorId = filters.actorId;
+    }
+    
+    if (filters?.action) {
+      where.action = filters.action;
+    }
+
+    if (filters?.targetType) {
+      where.targetType = filters.targetType;
+    }
+    
+    if (filters?.startDate) {
+      where.timestamp = {
+        ...where.timestamp,
+        gte: new Date(filters.startDate),
+      };
+    }
+
+    if (filters?.endDate) {
+      where.timestamp = {
+        ...where.timestamp,
+        lte: new Date(filters.endDate),
+      };
+    }
+
     return this.prisma.auditLog.findMany({
-      where: filters,
+      where,
       orderBy: { timestamp: 'desc' },
       take: 100,
     });

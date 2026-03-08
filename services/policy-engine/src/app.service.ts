@@ -1,21 +1,49 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { PrismaService } from './prisma.service';
 
 @Injectable()
 export class AppService {
   private readonly logger = new Logger(AppService.name);
 
+  constructor(private readonly prisma: PrismaService) {}
+
   async checkPolicy(data: { userId: string; resource: string; action: string }) {
     this.logger.log(`Checking policy for user ${data.userId} on ${data.resource}:${data.action}`);
     
-    // In a real system, this would evaluate OPA/Rego or RBAC rules in DB
-    // For now, let's implement a simple RBAC logic
-    if (data.action === 'read') return { allowed: true };
-    if (data.action === 'write' && data.userId === 'admin-id') return { allowed: true };
+    // Real RBAC lookup using Prisma
+    // We check if the user has an AccessGrant that links to a Role 
+    // that contains the required action on the given resource.
+    const grants = await this.prisma.accessGrant.findMany({
+      where: {
+        userId: data.userId,
+        status: 'active',
+        role: {
+          permissions: {
+            some: {
+              action: data.action,
+              resource: data.resource,
+            },
+          },
+        },
+      },
+      include: {
+        role: {
+          include: {
+            permissions: true,
+          },
+        },
+      },
+    });
+
+    if (grants.length > 0) {
+      return { allowed: true, grantId: grants[0].id };
+    }
     
     return { allowed: false, reason: 'Insufficient privileges' };
   }
 
   async getPolicies() {
+    // In a real system, these would also come from DB
     return [
       { id: '1', name: 'Global Read Access', description: 'Allows all users to read public resources', effect: 'allow', actions: ['read'], resources: ['*'] },
       { id: '2', name: 'Admin Write Access', description: 'Allows admins to write to all resources', effect: 'allow', actions: ['write', 'delete'], resources: ['*'], conditions: { role: 'admin' } },

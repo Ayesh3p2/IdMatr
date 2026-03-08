@@ -9,9 +9,16 @@ import { JwtStrategy } from './jwt.strategy';
 @Module({
   imports: [
     PassportModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'super-secret-key',
-      signOptions: { expiresIn: '1h' },
+    JwtModule.registerAsync({
+      useFactory: () => {
+        if (!process.env.JWT_SECRET) {
+          throw new Error('JWT_SECRET env var is required');
+        }
+        return {
+          secret: process.env.JWT_SECRET,
+          signOptions: { expiresIn: '1h' },
+        };
+      },
     }),
     ClientsModule.register([
       {
@@ -50,10 +57,17 @@ import { JwtStrategy } from './jwt.strategy';
         },
       },
       {
-        name: 'AUDIT_SERVICE',
+        name: 'POLICY_ENGINE',
         transport: Transport.NATS,
         options: {
           servers: [process.env.NATS_URL || 'nats://localhost:4222'],
+        },
+      },
+      {
+        name: 'AUDIT_SERVICE',
+        transport: Transport.NATS,
+        options: {
+          servers: [process.env.NATS_URL || 'localhost:4222'],
         },
       },
       {

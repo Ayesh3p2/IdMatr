@@ -1,39 +1,283 @@
 version: '3.8'
 
 services:
+
+  # ─────────────────────────────────────────
+  # INFRASTRUCTURE
+  # ─────────────────────────────────────────
+
   postgres:
     image: postgres:15
     environment:
       POSTGRES_USER: idmatr
-      POSTGRES_PASSWORD: password123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: idmatr_db
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U idmatr -d idmatr_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   redis:
-    image: redis:7
+    image: redis:7-alpine
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   neo4j:
     image: neo4j:5
     environment:
-      NEO4J_AUTH: neo4j/password123
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
+      NEO4J_PLUGINS: '["apoc"]'
     ports:
       - "7474:7474"
       - "7687:7687"
     volumes:
       - neo4j_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7474"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
 
   nats:
-    image: nats:2.9
+    image: nats:2.9-alpine
     ports:
       - "4222:4222"
       - "8222:8222"
+    command: ["--http_port", "8222", "--jetstream"]
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────
+  # MICROSERVICES
+  # ─────────────────────────────────────────
+
+  identity-service:
+    build:
+      context: .
+      dockerfile: services/identity-service/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://idmatr:${POSTGRES_PASSWORD}@postgres:5432/idmatr_db?schema=identity
+      NATS_URL: nats://nats:4222
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('net').createConnection(3001, 'localhost').on('connect', () => process.exit(0)).on('error', () => process.exit(1))\" 2>/dev/null || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  discovery-service:
+    build:
+      context: .
+      dockerfile: services/discovery-service/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://idmatr:${POSTGRES_PASSWORD}@postgres:5432/idmatr_db?schema=discovery
+      NATS_URL: nats://nats:4222
+      NODE_ENV: ${NODE_ENV:-production}
+      DEMO_MODE: ${DEMO_MODE:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+
+  governance-service:
+    build:
+      context: .
+      dockerfile: services/governance-service/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://idmatr:${POSTGRES_PASSWORD}@postgres:5432/idmatr_db?schema=governance
+      NATS_URL: nats://nats:4222
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+
+  risk-engine:
+    build:
+      context: .
+      dockerfile: services/risk-engine/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://idmatr:${POSTGRES_PASSWORD}@postgres:5432/idmatr_db?schema=risk
+      NATS_URL: nats://nats:4222
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+
+  audit-service:
+    build:
+      context: .
+      dockerfile: services/audit-service/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://idmatr:${POSTGRES_PASSWORD}@postgres:5432/idmatr_db?schema=audit
+      NATS_URL: nats://nats:4222
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+
+  policy-engine:
+    build:
+      context: .
+      dockerfile: services/policy-engine/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://idmatr:${POSTGRES_PASSWORD}@postgres:5432/idmatr_db?schema=identity
+      NATS_URL: nats://nats:4222
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+
+  graph-service:
+    build:
+      context: .
+      dockerfile: services/graph-service/Dockerfile
+    environment:
+      NEO4J_URL: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      NATS_URL: nats://nats:4222
+      NODE_ENV: ${NODE_ENV:-production}
+      DEMO_MODE: ${DEMO_MODE:-false}
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+    environment:
+      NATS_URL: nats://nats:4222
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker-queue:
+    build:
+      context: .
+      dockerfile: services/worker-queue/Dockerfile
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NATS_URL: nats://nats:4222
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────
+  # API GATEWAY (Public-facing)
+  # ─────────────────────────────────────────
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: apps/api-gateway/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      JWT_SECRET: ${JWT_SECRET}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      NATS_URL: nats://nats:4222
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      nats:
+        condition: service_healthy
+      identity-service:
+        condition: service_started
+      discovery-service:
+        condition: service_started
+      governance-service:
+        condition: service_started
+      risk-engine:
+        condition: service_started
+      audit-service:
+        condition: service_started
+      policy-engine:
+        condition: service_started
+      graph-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+      worker-queue:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ─────────────────────────────────────────
+  # ADMIN DASHBOARD (Next.js)
+  # ─────────────────────────────────────────
+
+  admin-dashboard:
+    build:
+      context: apps/admin-dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres_data:

@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { RpcException } from '@nestjs/microservices';
 import neo4j, { Driver } from 'neo4j-driver';
 
 @Injectable()
@@ -19,6 +20,12 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   async getIdentityGraph(userId: string) {
     this.logger.log(`Getting identity graph for user: ${userId}`);
+    
+    // Check if demo mode is enabled
+    if (process.env.DEMO_MODE === 'true') {
+      return this.getMockGraph(userId);
+    }
+
     const session = this.driver.session();
     try {
       const result = await session.run(
@@ -29,15 +36,20 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       );
 
       if (result.records.length === 0) {
-        // Fallback for demo if no data in Neo4j yet
-        return this.getMockGraph(userId);
+        throw new RpcException(`No graph data found for user: ${userId}`);
       }
 
-      // Process Neo4j records into nodes and links...
-      return result.records; 
+      // Proper mapping of Neo4j response
+      return result.records.map(r => ({
+        user: r.get('u').properties,
+        role: r.get('role').properties,
+        permissions: r.get('perm').properties,
+        application: r.get('app').properties
+      }));
     } catch (error) {
       this.logger.error(`Neo4j Error: ${error.message}`);
-      return this.getMockGraph(userId);
+      if (error instanceof RpcException) throw error;
+      throw new RpcException(`Graph database error: ${error.message}`);
     } finally {
       await session.close();
     }

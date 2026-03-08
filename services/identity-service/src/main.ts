@@ -9,6 +9,7 @@ async function bootstrap() {
       servers: [process.env.NATS_URL || 'nats://localhost:4222'],
     },
   });
+  app.enableShutdownHooks();
   await app.listen();
 }
 bootstrap();
