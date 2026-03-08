@@ -1,0 +1,101 @@
+import { Controller, Get, Post, Body, Param, UseGuards, Inject } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { AuthGuard } from '@nestjs/passport';
+import { firstValueFrom } from 'rxjs';
+import { RolesGuard } from './roles.guard';
+import { Roles } from './roles.decorator';
+
+@Controller('api')
+@UseGuards(AuthGuard('jwt'), RolesGuard)
+export class AppController {
+  constructor(
+    @Inject('IDENTITY_SERVICE') private identityClient: ClientProxy,
+    @Inject('DISCOVERY_SERVICE') private discoveryClient: ClientProxy,
+    @Inject('GOVERNANCE_SERVICE') private governanceClient: ClientProxy,
+    @Inject('RISK_ENGINE') private riskClient: ClientProxy,
+    @Inject('GRAPH_SERVICE') private graphClient: ClientProxy,
+    @Inject('AUDIT_SERVICE') private auditClient: ClientProxy,
+    @Inject('NOTIFICATION_SERVICE') private notificationClient: ClientProxy,
+    @Inject('WORKER_QUEUE') private workerClient: ClientProxy,
+  ) {}
+
+  @Get('health')
+  @Roles('admin', 'user')
+  getHealth() {
+    return { status: 'ok', service: 'api-gateway' };
+  }
+
+  // Identity Routes
+  @Get('identities')
+  @Roles('admin')
+  getIdentities() {
+    return firstValueFrom(this.identityClient.send({ cmd: 'get_all_identities' }, {}));
+  }
+
+  @Get('identities/:id')
+  @Roles('admin')
+  getIdentity(@Param('id') id: string) {
+    return firstValueFrom(this.identityClient.send({ cmd: 'get_identity' }, { id }));
+  }
+
+  // Application Discovery Routes
+  @Get('applications')
+  @Roles('admin')
+  getApplications() {
+    return firstValueFrom(this.discoveryClient.send({ cmd: 'get_all_apps' }, {}));
+  }
+
+  @Post('discovery/scan')
+  @Roles('admin')
+  triggerScan(@Body() data: any) {
+    return firstValueFrom(this.discoveryClient.send({ cmd: 'trigger_scan' }, data));
+  }
+
+  // Risk Engine Routes
+  @Get('risk/scores')
+  @Roles('admin')
+  getRiskScores() {
+    return firstValueFrom(this.riskClient.send({ cmd: 'get_all_risk_scores' }, {}));
+  }
+
+  @Get('risk/events')
+  @Roles('admin')
+  getRiskEvents() {
+    return firstValueFrom(this.riskClient.send({ cmd: 'get_all_risk_events' }, {}));
+  }
+
+  // Governance Routes
+  @Get('governance/workflows')
+  @Roles('admin')
+  getWorkflows() {
+    return firstValueFrom(this.governanceClient.send({ cmd: 'get_all_workflows' }, {}));
+  }
+
+  // Graph Visualization Routes
+  @Get('graph/identity/:id')
+  @Roles('admin')
+  getIdentityGraph(@Param('id') id: string) {
+    return firstValueFrom(this.graphClient.send({ cmd: 'get_identity_graph' }, { id }));
+  }
+
+  // Audit Routes
+  @Get('audit/logs')
+  @Roles('admin')
+  getAuditLogs() {
+    return firstValueFrom(this.auditClient.send({ cmd: 'get_audit_logs' }, {}));
+  }
+
+  // Notification Routes
+  @Post('notifications/send')
+  @Roles('admin')
+  sendNotification(@Body() data: any) {
+    return firstValueFrom(this.notificationClient.send({ cmd: 'send_notification' }, data));
+  }
+
+  // Worker Queue Routes
+  @Get('jobs/:id')
+  @Roles('admin')
+  getJobStatus(@Param('id') id: string) {
+    return firstValueFrom(this.workerClient.send({ cmd: 'get_job_status' }, { jobId: id }));
+  }
+}

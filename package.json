@@ -1,0 +1,44 @@
+{
+  "name": "idmatr",
+  "version": "1.0.0",
+  "description": "Enterprise-grade Identity Security Platform",
+  "private": true,
+  "workspaces": [
+    "services/*",
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "start": "npm run start --workspaces --if-present",
+    "dev": "npm run dev --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down"
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11.1.16",
+    "@nestjs/core": "^11.1.16",
+    "@nestjs/jwt": "^11.0.2",
+    "@nestjs/microservices": "^11.1.16",
+    "@nestjs/passport": "^11.0.5",
+    "@prisma/client": "^7.4.2",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/lodash": "^4.17.24",
+    "@types/node": "^25.3.5",
+    "@types/passport-jwt": "^4.0.1",
+    "axios": "^1.13.6",
+    "concurrently": "^8.2.2",
+    "jsonwebtoken": "^9.0.3",
+    "lodash": "^4.17.23",
+    "nats": "^2.29.3",
+    "neo4j-driver": "^6.0.1",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "prisma": "^7.4.2",
+    "rimraf": "^5.0.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

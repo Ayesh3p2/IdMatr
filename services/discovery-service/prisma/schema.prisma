@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model DiscoveredApp {
+  id              String   @id @default(uuid())
+  name            String
+  source          String   // google, microsoft, slack, etc.
+  rawTelemetry    Json?
+  firstDetected   DateTime @default(now())
+  lastDetected    DateTime @updatedAt
+  status          String   // identified, unknown, shadow-it
+  metadata        Json?
+  users           DiscoveredUser[]
+}
+
+model DiscoveredUser {
+  id              String   @id @default(uuid())
+  email           String
+  externalId      String?  // ID in the source system
+  appId           String
+  app             DiscoveredApp @relation(fields: [appId], references: [id])
+  permissions     String[] // raw permissions from source
+  isAdmin         Boolean  @default(false)
+  lastActivity    DateTime?
+  status          String   // active, inactive
+}
+
+model DiscoveryConnector {
+  id              String   @id @default(uuid())
+  type            String   // google, microsoft, slack, etc.
+  config          Json?    // encrypted API keys, etc.
+  status          String   // active, disabled, error
+  lastScan        DateTime?
+  nextScan        DateTime?
+}
