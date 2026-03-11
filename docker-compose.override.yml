@@ -1,0 +1,48 @@
+# Local development overrides
+# This file is automatically merged with docker-compose.yml in local dev
+# DO NOT use in production
+
+services:
+  # Expose infrastructure ports for local tooling
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  neo4j:
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+
+  nats:
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+  # Dev overrides: use local source with hot reload
+  identity-service:
+    build:
+      target: builder
+    volumes:
+      - ./services/identity-service/src:/app/services/identity-service/src
+    command: ["npx", "ts-node", "-r", "tsconfig-paths/register", "src/main.ts"]
+    environment:
+      NODE_ENV: development
+
+  discovery-service:
+    environment:
+      NODE_ENV: development
+      DEMO_MODE: "true"
+
+  graph-service:
+    environment:
+      NODE_ENV: development
+      DEMO_MODE: "true"
+
+  admin-dashboard:
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NODE_ENV: development

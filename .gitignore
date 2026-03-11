@@ -40,3 +40,15 @@ logs/
 # Prisma
 /services/**/prisma/*.db
 /services/**/prisma/*.db-journal
+
+# Platform deployment
+k8s/secrets.yaml
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+dist/
+.next/
+node_modules/
+coverage/

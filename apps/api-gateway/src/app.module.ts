@@ -5,6 +5,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { JwtStrategy } from './jwt.strategy';
+import { RolesGuard } from './roles.guard';
 
 @Module({
   imports: [
@@ -67,7 +68,7 @@ import { JwtStrategy } from './jwt.strategy';
         name: 'AUDIT_SERVICE',
         transport: Transport.NATS,
         options: {
-          servers: [process.env.NATS_URL || 'localhost:4222'],
+          servers: [process.env.NATS_URL || 'nats://localhost:4222'],
         },
       },
       {
@@ -87,6 +88,6 @@ import { JwtStrategy } from './jwt.strategy';
     ]),
   ],
   controllers: [AppController],
-  providers: [AppService, JwtStrategy],
+  providers: [AppService, JwtStrategy, RolesGuard],
 })
 export class AppModule {}

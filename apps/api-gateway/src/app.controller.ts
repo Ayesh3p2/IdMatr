@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, Inject, SetMetadata } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { AuthGuard } from '@nestjs/passport';
 import { firstValueFrom } from 'rxjs';
@@ -24,9 +24,9 @@ export class AppController {
   ) {}
 
   @Get('health')
-  @Roles('admin', 'user')
+  @SetMetadata('isPublic', true)
   getHealth() {
-    return { status: 'ok', service: 'api-gateway' };
+    return { status: 'ok', service: 'api-gateway', timestamp: new Date().toISOString() };
   }
 
   // Identity Routes

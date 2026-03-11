@@ -1,9 +1,10 @@
 # ── apps/admin-dashboard/Dockerfile ──
+# Build context: apps/admin-dashboard (set in docker-compose.yml)
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY apps/admin-dashboard/package*.json ./
-RUN npm install
-COPY apps/admin-dashboard/ .
+COPY package*.json ./
+RUN npm ci
+COPY . .
 RUN npm run build
 
 FROM node:20-alpine AS runner

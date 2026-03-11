@@ -40,7 +40,7 @@ npm install
 
 # 6. Run Prisma migrations for each service
 echo "💎 Running Prisma migrations..."
-SERVICES_WITH_PRISMA=("identity-service" "discovery-service" "governance-service" "risk-engine" "audit-service")
+SERVICES_WITH_PRISMA=("identity-service" "discovery-service" "governance-service" "risk-engine" "audit-service" "policy-engine")
 
 for service in "${SERVICES_WITH_PRISMA[@]}"; do
     if [ -d "services/$service/prisma" ]; then

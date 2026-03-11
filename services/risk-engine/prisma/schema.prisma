@@ -9,7 +9,9 @@ datasource db {
 
 model RiskEvent {
   id              String   @id @default(uuid())
-  userId          String
+  targetId        String   // userId or applicationId being evaluated
+  targetType      String   // user, application
+  userId          String   // actor/subject user ID
   applicationId   String?
   type            String   // excessive_privilege, dormant_account, privilege_escalation, abnormal_behavior
   severity        String   // low, medium, high, critical

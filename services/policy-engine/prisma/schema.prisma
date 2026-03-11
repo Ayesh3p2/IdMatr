@@ -1,5 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// policy-engine shares the identity_service PostgreSQL schema
+// (docker-compose uses schema=identity_service for this service)
 
 generator client {
   provider = "prisma-client-js"
@@ -14,7 +14,7 @@ model User {
   id          String   @id @default(uuid())
   email       String   @unique
   name        String
-  status      String   // active, inactive, suspended
+  status      String
   riskScore   Float    @default(0)
   lastLogin   DateTime @default(now())
   createdAt   DateTime @default(now())
@@ -26,10 +26,10 @@ model User {
 model Application {
   id              String   @id @default(uuid())
   name            String
-  type            String   // saas, on-prem, internal
+  type            String
   discoverySource String
   riskScore       Float    @default(0)
-  status          String   // managed, unmanaged, shadow-it
+  status          String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   accessGrants    AccessGrant[]
@@ -50,9 +50,9 @@ model Permission {
   id          String   @id @default(uuid())
   name        String
   description String?
-  action      String   // read, write, delete, admin, etc.
-  resource    String   // resource this permission applies to
-  riskLevel   String   // low, medium, high, critical
+  action      String
+  resource    String
+  riskLevel   String
   roleId      String
   role        Role     @relation(fields: [roleId], references: [id])
 }
@@ -67,5 +67,5 @@ model AccessGrant {
   role          Role     @relation(fields: [roleId], references: [id])
   grantedAt     DateTime @default(now())
   expiresAt     DateTime?
-  status        String   // active, revoked, expired
+  status        String
 }

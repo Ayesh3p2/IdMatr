@@ -13,6 +13,6 @@ export class AppController {
 
   @MessagePattern({ cmd: 'get_job_status' })
   async getJobStatus(@Payload() data: { jobId: string }) {
-    return this.appService.processJob(data.jobId);
+    return this.appService.getJobStatus(data.jobId);
   }
 }

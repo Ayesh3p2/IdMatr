@@ -1,0 +1,428 @@
+# All microservice deployments
+# Replace IMAGE_REGISTRY and IMAGE_TAG with your values (e.g., gcr.io/my-project or AWS ECR)
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity-service
+  namespace: idmatr
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: identity-service
+  template:
+    metadata:
+      labels:
+        app: identity-service
+    spec:
+      containers:
+        - name: identity-service
+          image: ${IMAGE_REGISTRY}/identity-service:${IMAGE_TAG:-latest}
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://idmatr:$(POSTGRES_PASSWORD)@postgres:5432/idmatr_db?schema=identity_service"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: idmatr-secrets
+                  key: POSTGRES_PASSWORD
+            - name: NATS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NATS_URL
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NODE_ENV
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discovery-service
+  namespace: idmatr
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: discovery-service
+  template:
+    metadata:
+      labels:
+        app: discovery-service
+    spec:
+      containers:
+        - name: discovery-service
+          image: ${IMAGE_REGISTRY}/discovery-service:${IMAGE_TAG:-latest}
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://idmatr:$(POSTGRES_PASSWORD)@postgres:5432/idmatr_db?schema=discovery_service"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: idmatr-secrets
+                  key: POSTGRES_PASSWORD
+            - name: NATS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NATS_URL
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NODE_ENV
+            - name: DEMO_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: DEMO_MODE
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: governance-service
+  namespace: idmatr
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: governance-service
+  template:
+    metadata:
+      labels:
+        app: governance-service
+    spec:
+      containers:
+        - name: governance-service
+          image: ${IMAGE_REGISTRY}/governance-service:${IMAGE_TAG:-latest}
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://idmatr:$(POSTGRES_PASSWORD)@postgres:5432/idmatr_db?schema=governance_service"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: idmatr-secrets
+                  key: POSTGRES_PASSWORD
+            - name: NATS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NATS_URL
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NODE_ENV
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: risk-engine
+  namespace: idmatr
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: risk-engine
+  template:
+    metadata:
+      labels:
+        app: risk-engine
+    spec:
+      containers:
+        - name: risk-engine
+          image: ${IMAGE_REGISTRY}/risk-engine:${IMAGE_TAG:-latest}
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://idmatr:$(POSTGRES_PASSWORD)@postgres:5432/idmatr_db?schema=risk_engine"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: idmatr-secrets
+                  key: POSTGRES_PASSWORD
+            - name: NATS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NATS_URL
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NODE_ENV
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audit-service
+  namespace: idmatr
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: audit-service
+  template:
+    metadata:
+      labels:
+        app: audit-service
+    spec:
+      containers:
+        - name: audit-service
+          image: ${IMAGE_REGISTRY}/audit-service:${IMAGE_TAG:-latest}
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://idmatr:$(POSTGRES_PASSWORD)@postgres:5432/idmatr_db?schema=audit_service"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: idmatr-secrets
+                  key: POSTGRES_PASSWORD
+            - name: NATS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NATS_URL
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NODE_ENV
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: policy-engine
+  namespace: idmatr
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: policy-engine
+  template:
+    metadata:
+      labels:
+        app: policy-engine
+    spec:
+      containers:
+        - name: policy-engine
+          image: ${IMAGE_REGISTRY}/policy-engine:${IMAGE_TAG:-latest}
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://idmatr:$(POSTGRES_PASSWORD)@postgres:5432/idmatr_db?schema=identity_service"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: idmatr-secrets
+                  key: POSTGRES_PASSWORD
+            - name: NATS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NATS_URL
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NODE_ENV
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graph-service
+  namespace: idmatr
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: graph-service
+  template:
+    metadata:
+      labels:
+        app: graph-service
+    spec:
+      containers:
+        - name: graph-service
+          image: ${IMAGE_REGISTRY}/graph-service:${IMAGE_TAG:-latest}
+          env:
+            - name: NEO4J_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NEO4J_URL
+            - name: NEO4J_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NEO4J_USER
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: idmatr-secrets
+                  key: NEO4J_PASSWORD
+            - name: NATS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NATS_URL
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NODE_ENV
+            - name: DEMO_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: DEMO_MODE
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: idmatr
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+        - name: notification-service
+          image: ${IMAGE_REGISTRY}/notification-service:${IMAGE_TAG:-latest}
+          env:
+            - name: NATS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NATS_URL
+            - name: SMTP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: SMTP_PORT
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: idmatr-secrets
+                  key: SMTP_USER
+            - name: SMTP_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: idmatr-secrets
+                  key: SMTP_PASS
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: idmatr-secrets
+                  key: SLACK_WEBHOOK_URL
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NODE_ENV
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-queue
+  namespace: idmatr
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: worker-queue
+  template:
+    metadata:
+      labels:
+        app: worker-queue
+    spec:
+      containers:
+        - name: worker-queue
+          image: ${IMAGE_REGISTRY}/worker-queue:${IMAGE_TAG:-latest}
+          env:
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: REDIS_URL
+            - name: NATS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NATS_URL
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: idmatr-config
+                  key: NODE_ENV
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
