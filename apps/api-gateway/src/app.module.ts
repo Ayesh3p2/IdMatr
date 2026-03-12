@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -8,6 +10,11 @@ import { JwtStrategy } from './jwt.strategy';
 
 @Module({
   imports: [
+    // Rate limiting: 100 requests per 60s per IP (configurable via env)
+    ThrottlerModule.forRoot([{
+      ttl: parseInt(process.env.RATE_LIMIT_TTL || '60') * 1000,
+      limit: parseInt(process.env.RATE_LIMIT_MAX || '100'),
+    }]),
     PassportModule,
     JwtModule.registerAsync({
       useFactory: () => {
@@ -87,6 +94,11 @@ import { JwtStrategy } from './jwt.strategy';
     ]),
   ],
   controllers: [AppController],
-  providers: [AppService, JwtStrategy],
+  providers: [
+    AppService,
+    JwtStrategy,
+    // Apply rate limiting globally
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule {}

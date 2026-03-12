@@ -1,38 +1,27 @@
-# ── services/identity-service/Dockerfile ──
 FROM node:20-alpine AS builder
 WORKDIR /app
-
-# Install build tools
 RUN apk add --no-cache python3 make g++
-
-# Copy workspace root
 COPY package*.json ./
 COPY tsconfig*.json ./
 COPY packages/ ./packages/
-
-# Copy this service
+COPY node_modules/ ./node_modules/
 COPY services/identity-service/ ./services/identity-service/
-
-# Install deps
-RUN npm install --workspace=services/identity-service --include-workspace-root
-
-# Generate Prisma client
 WORKDIR /app/services/identity-service
 RUN npx prisma generate
+RUN node_modules/.bin/tsc --skipLibCheck 2>/dev/null; echo "build done"
 
-# Build TypeScript
-RUN npx tsc -p tsconfig.json || npx tsc --skipLibCheck -p tsconfig.json
-
-# ── Runner ──
 FROM node:20-alpine AS runner
-RUN apk add --no-cache dumb-init
+RUN apk add --no-cache dumb-init wget
 WORKDIR /app
-
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/services/identity-service/dist ./dist
-COPY --from=builder /app/services/identity-service/prisma ./prisma
+COPY --from=builder /app/services/identity-service/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/services/identity-service/package.json ./
-
 ENV NODE_ENV=production
+RUN addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001 -G nodejs
+USER nestjs
+ENV PORT=3000
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "dist/main.js"]

@@ -38,6 +38,13 @@ const navSections = [
       { href: "/compliance", label: "Compliance", icon: "◉", desc: "Certifications & audits" },
       { href: "/audit", label: "Audit Trail", icon: "⬡", desc: "Activity logs" },
     ]
+  },
+  {
+    label: "Administration",
+    items: [
+      { href: "/health", label: "System Health", icon: "◈", desc: "Services & uptime" },
+      { href: "/settings", label: "Settings", icon: "◉", desc: "Platform configuration" },
+    ]
   }
 ];
 

@@ -8,9 +8,15 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   private driver: Driver;
 
   async onModuleInit() {
+    const neo4jUrl = process.env.NEO4J_URL || 'bolt://localhost:7687';
+    const neo4jUser = process.env.NEO4J_USER || 'neo4j';
+    const neo4jPassword = process.env.NEO4J_PASSWORD;
+    if (!neo4jPassword && process.env.DEMO_MODE !== 'true') {
+      this.logger.warn('NEO4J_PASSWORD not set — graph queries may fail in non-demo mode');
+    }
     this.driver = neo4j.driver(
-      process.env.NEO4J_URL || 'bolt://localhost:7687',
-      neo4j.auth.basic(process.env.NEO4J_USER || 'neo4j', process.env.NEO4J_PASSWORD || 'password123')
+      neo4jUrl,
+      neo4j.auth.basic(neo4jUser, neo4jPassword || '')
     );
   }
 
