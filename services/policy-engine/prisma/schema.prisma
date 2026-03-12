@@ -1,0 +1,71 @@
+// Policy Engine shares the identity-service database schema
+// Same DATABASE_URL, same models — used for RBAC policy enforcement
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  name         String
+  status       String
+  riskScore    Float         @default(0)
+  lastLogin    DateTime      @default(now())
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  metadata     Json?
+  accessGrants AccessGrant[]
+}
+
+model Application {
+  id              String        @id @default(uuid())
+  name            String
+  type            String
+  discoverySource String
+  riskScore       Float         @default(0)
+  status          String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  accessGrants    AccessGrant[]
+  roles           Role[]
+}
+
+model Role {
+  id            String        @id @default(uuid())
+  name          String
+  description   String?
+  applicationId String
+  application   Application   @relation(fields: [applicationId], references: [id])
+  permissions   Permission[]
+  accessGrants  AccessGrant[]
+}
+
+model Permission {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+  riskLevel   String
+  action      String?
+  resource    String?
+  roleId      String
+  role        Role    @relation(fields: [roleId], references: [id])
+}
+
+model AccessGrant {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id])
+  roleId        String
+  role          Role        @relation(fields: [roleId], references: [id])
+  grantedAt     DateTime    @default(now())
+  expiresAt     DateTime?
+  status        String
+}

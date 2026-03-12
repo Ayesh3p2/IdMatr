@@ -1,0 +1,71 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "admin-dashboard",
+      "runtimeExecutable": "/Users/sudhir/.nvm/versions/node/v24.13.1/bin/node",
+      "runtimeArgs": [".claude/start-dashboard.js"],
+      "port": 3000
+    },
+    {
+      "name": "api-gateway",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev", "--workspace=apps/api-gateway"],
+      "port": 3001
+    },
+    {
+      "name": "identity-service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev", "--workspace=services/identity-service"],
+      "port": 3002
+    },
+    {
+      "name": "discovery-service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev", "--workspace=services/discovery-service"],
+      "port": 3003
+    },
+    {
+      "name": "governance-service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev", "--workspace=services/governance-service"],
+      "port": 3004
+    },
+    {
+      "name": "risk-engine",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev", "--workspace=services/risk-engine"],
+      "port": 3005
+    },
+    {
+      "name": "audit-service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev", "--workspace=services/audit-service"],
+      "port": 3006
+    },
+    {
+      "name": "policy-engine",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev", "--workspace=services/policy-engine"],
+      "port": 3007
+    },
+    {
+      "name": "graph-service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev", "--workspace=services/graph-service"],
+      "port": 3008
+    },
+    {
+      "name": "notification-service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev", "--workspace=services/notification-service"],
+      "port": 3009
+    },
+    {
+      "name": "worker-queue",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev", "--workspace=services/worker-queue"],
+      "port": 3010
+    }
+  ]
+}

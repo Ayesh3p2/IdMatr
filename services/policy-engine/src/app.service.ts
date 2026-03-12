@@ -49,4 +49,24 @@ export class AppService {
       { id: '2', name: 'Admin Write Access', description: 'Allows admins to write to all resources', effect: 'allow', actions: ['write', 'delete'], resources: ['*'], conditions: { role: 'admin' } },
     ];
   }
+
+  async getPolicyViolations() {
+    // Query for policy violations based on permissions that exceed policy constraints
+    const permissions = await this.prisma.permission.findMany({
+      where: { riskLevel: { in: ['high', 'critical'] } },
+      include: { role: { include: { accessGrants: { where: { status: 'active' } } } } },
+    });
+
+    return permissions
+      .filter(p => p.role && p.role.accessGrants.length > 0)
+      .map(p => ({
+        id: `PV-${p.id.slice(0, 6)}`,
+        permissionId: p.id,
+        permissionName: p.name,
+        riskLevel: p.riskLevel,
+        affectedUsers: p.role?.accessGrants.length || 0,
+        policy: `${p.name} Restriction Policy`,
+        status: 'Open',
+      }));
+  }
 }

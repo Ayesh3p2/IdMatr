@@ -51,6 +51,8 @@ model Permission {
   name        String
   description String?
   riskLevel   String   // low, medium, high, critical
+  action      String?
+  resource    String?
   roleId      String
   role        Role     @relation(fields: [roleId], references: [id])
 }

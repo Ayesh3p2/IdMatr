@@ -31,7 +31,7 @@ export class AppService {
 
   async updateWorkflow(id: string, action: string, approverId: string, comment?: string) {
     const status = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'pending';
-    
+
     return this.prisma.approvalWorkflow.update({
       where: { id },
       data: {
@@ -44,6 +44,40 @@ export class AppService {
             timestamp: new Date(),
           },
         },
+      },
+    });
+  }
+
+  async getJMLEvents() {
+    // Return JML (Joiner/Mover/Leaver) lifecycle events
+    // These could be stored in workflows with specific types
+    const workflows = await this.prisma.approvalWorkflow.findMany({
+      where: {
+        requestType: { in: ['joiner', 'mover', 'leaver'] },
+      },
+      orderBy: { id: 'desc' },
+      take: 50,
+    });
+
+    return workflows.map(w => ({
+      id: w.id,
+      type: w.requestType,
+      userId: w.requesterId,
+      targetId: w.targetId,
+      status: w.status,
+      createdAt: w.id, // Using id as proxy for creation order
+      slaDueDate: w.slaDueDate,
+    }));
+  }
+
+  async createJMLEvent(data: any) {
+    return this.prisma.approvalWorkflow.create({
+      data: {
+        requestType: data.type || 'joiner',
+        requesterId: data.userId || 'system',
+        targetId: data.targetId || data.userId,
+        status: 'pending',
+        slaDueDate: data.slaDueDate || new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
       },
     });
   }

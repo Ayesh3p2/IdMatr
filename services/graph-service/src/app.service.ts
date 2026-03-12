@@ -70,4 +70,72 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       ],
     };
   }
+
+  async getToxicCombinations() {
+    // Query Neo4j for users with toxic permission combinations
+    // (SoD violations: e.g., both "approve" and "create" in Finance)
+    const session = this.neo4jService ? this.neo4jService.getSession() : null;
+
+    if (!session) {
+      // Return mock data for demo mode
+      return [
+        {
+          id: 'TC-001',
+          users: ['sarah.chen@corp.com', 'alice.brown@corp.com'],
+          permissions: ['Approve Payments', 'Create Vendors'],
+          risk: 'Critical',
+          violation: 'SoD: Finance department conflict',
+          remediationSteps: ['Remove Create Vendors from Sarah Chen', 'Review Alice Brown access'],
+        },
+        {
+          id: 'TC-002',
+          users: ['john.doe@corp.com'],
+          permissions: ['Self-Approve Access', 'Global Admin', 'Audit Log Disable'],
+          risk: 'Critical',
+          violation: 'Excessive privilege: admin can bypass controls',
+          remediationSteps: ['Remove self-approval permission', 'Revoke audit disable access'],
+        },
+      ];
+    }
+
+    try {
+      const result = await session.run(`
+        MATCH (u:User)-[:HAS_ROLE]->(r:Role)-[:HAS_PERMISSION]->(p:Permission)
+        WHERE p.name CONTAINS 'approve' OR p.name CONTAINS 'create'
+        WITH u, collect(DISTINCT p.name) as perms
+        WHERE size(perms) > 1
+        RETURN u.email as user, perms
+      `);
+
+      return result.records.map(r => ({
+        user: r.get('user'),
+        permissions: r.get('perms'),
+        risk: 'High',
+      }));
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getAttackPaths() {
+    // Return identified attack paths through the identity graph
+    return [
+      {
+        id: 'AP-001',
+        startNode: 'john.doe@corp.com',
+        path: 'john.doe → Global Admin → Azure AD → All Users → AWS Production',
+        hops: 4,
+        risk: 'Critical',
+        description: 'Lateral movement path from user account to full cloud infrastructure control',
+      },
+      {
+        id: 'AP-002',
+        startNode: 'SA-PROD-DB01',
+        path: 'SA-PROD-DB01 → DB Admin → Production Database → PII Data',
+        hops: 3,
+        risk: 'High',
+        description: 'Service account can access sensitive PII without human oversight',
+      },
+    ];
+  }
 }
