@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "admin-dashboard",
+      "runtimeExecutable": "/Users/sudhir/.nvm/versions/node/v24.13.1/bin/node",
+      "runtimeArgs": [".claude/start-dashboard.js"],
+      "port": 3000
+    },
+    {
+      "name": "api-gateway",
+      "runtimeExecutable": "/Users/sudhir/.nvm/versions/node/v24.13.1/bin/npm",
+      "runtimeArgs": ["run", "start:dev", "--workspace=apps/api-gateway"],
+      "port": 3001
+    }
+  ]
+}

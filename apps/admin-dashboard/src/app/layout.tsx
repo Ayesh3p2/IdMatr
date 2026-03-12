@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import Link from "next/link";
 
-const inter = Inter({ subsets: ["latin"] });
+// Use system font stack to avoid next/font/google network calls during local preview
+const inter = { className: "font-sans" };
 
 export const metadata: Metadata = {
   title: "IDMatr | Identity Intelligence Platform",
@@ -17,6 +18,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Tailwind CSS Play CDN — for local preview only.
+            Production Docker builds use the PostCSS pipeline instead. */}
+        <Script src="https://cdn.tailwindcss.com" strategy="beforeInteractive" />
+      </head>
       <body className={`${inter.className} bg-slate-50`}>
         <div className="flex h-screen overflow-hidden">
           {/* Sidebar */}
