@@ -1,8 +1,9 @@
-node_modules
-**/node_modules
 **/.next
 **/dist
 **/*.log
 .git
 .env
 .env.local
+apps/*/node_modules
+services/*/node_modules
+packages/*/node_modules
