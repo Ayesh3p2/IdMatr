@@ -1,5 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Policy Engine Prisma Schema
+// Connects to the same DB as identity-service (identity_service schema)
+// for RBAC policy enforcement
 
 generator client {
   provider = "prisma-client-js"
@@ -14,26 +15,30 @@ model User {
   id          String   @id @default(uuid())
   email       String   @unique
   name        String
-  status      String   // active, inactive, suspended
+  status      String
   riskScore   Float    @default(0)
   lastLogin   DateTime @default(now())
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   metadata    Json?
   accessGrants AccessGrant[]
+
+  @@map("User")
 }
 
 model Application {
   id              String   @id @default(uuid())
   name            String
-  type            String   // saas, on-prem, internal
+  type            String
   discoverySource String
   riskScore       Float    @default(0)
-  status          String   // managed, unmanaged, shadow-it
+  status          String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   accessGrants    AccessGrant[]
   roles           Role[]
+
+  @@map("Application")
 }
 
 model Role {
@@ -44,17 +49,21 @@ model Role {
   application   Application @relation(fields: [applicationId], references: [id])
   permissions   Permission[]
   accessGrants  AccessGrant[]
+
+  @@map("Role")
 }
 
 model Permission {
   id          String   @id @default(uuid())
   name        String
   description String?
-  riskLevel   String   // low, medium, high, critical
+  riskLevel   String
   action      String?  // e.g. "read", "write", "delete", "admin"
   resource    String?  // e.g. "users", "applications", "*"
   roleId      String
   role        Role     @relation(fields: [roleId], references: [id])
+
+  @@map("Permission")
 }
 
 model AccessGrant {
@@ -67,5 +76,7 @@ model AccessGrant {
   role          Role     @relation(fields: [roleId], references: [id])
   grantedAt     DateTime @default(now())
   expiresAt     DateTime?
-  status        String   // active, revoked, expired
+  status        String
+
+  @@map("AccessGrant")
 }
