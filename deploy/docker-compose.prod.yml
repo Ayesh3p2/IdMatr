@@ -1,0 +1,166 @@
+# ============================================================
+# IDMatr — Production Docker Compose Override
+# Usage: docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml --env-file .env.production.secure up -d
+# ============================================================
+version: '3.9'
+
+services:
+  # ── API Gateway: stricter production limits ────────────────
+  api-gateway:
+    environment:
+      NODE_ENV: production
+      TRUST_PROXY: "true"
+      RATE_LIMIT_TTL: "60"
+      RATE_LIMIT_MAX: "100"
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        delay: 5s
+
+  # ── Admin Dashboard ────────────────────────────────────────
+  admin-dashboard:
+    environment:
+      NODE_ENV: production
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
+
+  # ── Microservices: resource limits ────────────────────────
+  identity-service:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.25"
+
+  discovery-service:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.25"
+
+  governance-service:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.25"
+
+  risk-engine:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.25"
+
+  audit-service:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.25"
+
+  policy-engine:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.25"
+
+  nats:
+    # Mount TLS certificates for secure inter-service communication
+    # On localhost/dev: comment out volumes and command override
+    volumes:
+      - ./deploy/nats/nats-server.conf:/etc/nats/nats-server.conf:ro
+      - ./deploy/nats/certs:/etc/nats/certs:ro
+    ports: []
+    command: ["-c", "/etc/nats/nats-server.conf"]
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4222/connz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── PostgreSQL: disable external port in production ────────
+  postgres:
+    ports: []  # Remove external port binding — internal access only
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
+
+  # ── Redis: disable external port in production ─────────────
+  redis:
+    ports: []
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --save 60 1000
+      --loglevel warning
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.25"
+
+  # ── Neo4j: disable external ports in production ────────────
+  neo4j:
+    ports:
+      - "127.0.0.1:7474:7474"  # Bind to loopback only
+      - "127.0.0.1:7687:7687"
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
+
+  # ── Control Plane: bind to loopback only ──────────────────
+  control-plane:
+    ports:
+      - "127.0.0.1:3010:3010"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.5"
+
+  control-plane-ui:
+    deploy:
+      resources:
+        limits:
+          memory: 192m
+          cpus: "0.25"
+
+  graph-service:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.50"
+
+  notification-service:
+    deploy:
+      resources:
+        limits:
+          memory: 192m
+          cpus: "0.30"
+
+  worker-queue:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.50"

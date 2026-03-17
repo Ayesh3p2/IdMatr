@@ -1,0 +1,19 @@
+server_url: "https://your-idmart-instance.com"
+api_token: ""           # Set via IDMART_API_TOKEN env var or here
+device_id: ""           # Auto-generated on first run using hostname + MAC address
+scan_interval: 300      # Seconds between scans (default 5 min)
+log_level: "info"       # debug, info, warn, error
+log_file: ""            # Empty = auto-detect platform default:
+                        #   macOS:   /Library/Logs/IDMatr/agent.log
+                        #   Linux:   /var/log/idmart/agent.log
+                        #   Windows: %ProgramData%\IDMatr\logs\agent.log
+queue_dir: ""           # Empty = auto-detect platform default:
+                        #   macOS:   /Library/IDMatr/queue
+                        #   Linux:   /var/lib/idmart/queue
+                        #   Windows: %ProgramData%\IDMatr\queue
+update_check_interval: 3600  # Seconds between update checks (1 hour)
+tls_skip_verify: false  # NEVER set true in production
+tags:
+  environment: "production"
+  team: ""
+  location: ""

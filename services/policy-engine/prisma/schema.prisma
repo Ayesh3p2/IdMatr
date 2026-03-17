@@ -2,7 +2,8 @@
 // Same DATABASE_URL, same models — used for RBAC policy enforcement
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
 }
 
 datasource db {
@@ -12,7 +13,8 @@ datasource db {
 
 model User {
   id           String        @id @default(uuid())
-  email        String        @unique
+  tenantId     String
+  email        String
   name         String
   status       String
   riskScore    Float         @default(0)
@@ -21,10 +23,14 @@ model User {
   updatedAt    DateTime      @updatedAt
   metadata     Json?
   accessGrants AccessGrant[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
 }
 
 model Application {
   id              String        @id @default(uuid())
+  tenantId        String
   name            String
   type            String
   discoverySource String
@@ -34,20 +40,26 @@ model Application {
   updatedAt       DateTime      @updatedAt
   accessGrants    AccessGrant[]
   roles           Role[]
+
+  @@index([tenantId])
 }
 
 model Role {
   id            String        @id @default(uuid())
+  tenantId      String
   name          String
   description   String?
   applicationId String
   application   Application   @relation(fields: [applicationId], references: [id])
   permissions   Permission[]
   accessGrants  AccessGrant[]
+
+  @@index([tenantId])
 }
 
 model Permission {
   id          String  @id @default(uuid())
+  tenantId    String
   name        String
   description String?
   riskLevel   String
@@ -55,10 +67,13 @@ model Permission {
   resource    String?
   roleId      String
   role        Role    @relation(fields: [roleId], references: [id])
+
+  @@index([tenantId])
 }
 
 model AccessGrant {
   id            String      @id @default(uuid())
+  tenantId      String
   userId        String
   user          User        @relation(fields: [userId], references: [id])
   applicationId String
@@ -68,4 +83,6 @@ model AccessGrant {
   grantedAt     DateTime    @default(now())
   expiresAt     DateTime?
   status        String
+
+  @@index([tenantId])
 }

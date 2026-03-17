@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
 }
 
 datasource db {
@@ -9,6 +10,7 @@ datasource db {
 
 model AuditLog {
   id          String   @id @default(uuid())
+  tenantId    String
   timestamp   DateTime @default(now())
   actorId     String
   actorType   String   // user, system, service
@@ -19,4 +21,9 @@ model AuditLog {
   details     Json?
   ipAddress   String?
   userAgent   String?
+  previousHash String?
+  entryHash    String?
+
+  @@index([tenantId])
+  @@index([tenantId, timestamp])
 }

@@ -1,3 +1,12 @@
+networks:
+  # Internal network — microservices, databases, NATS (not reachable from host)
+  internal:
+    driver: bridge
+    internal: true
+  # Edge network — only api-gateway, admin-dashboard, control-plane need external reachability
+  edge:
+    driver: bridge
+
 services:
 
   # ─────────────────────────────────────────
@@ -10,10 +19,13 @@ services:
       POSTGRES_USER: idmatr
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: idmatr_db
-    ports:
-      - "5432:5432"
+      # Enforce SSL for all connections
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # No external port exposure — internal network only
+    networks:
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U idmatr -d idmatr_db"]
       interval: 10s
@@ -28,17 +40,21 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     command: >
       redis-server
+      --requirepass ${REDIS_PASSWORD}
       --appendonly yes
       --maxmemory 256mb
       --maxmemory-policy allkeys-lru
+      --bind 0.0.0.0
+      --protected-mode yes
+    # No external port exposure — internal network only
+    networks:
+      - internal
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -53,19 +69,23 @@ services:
     image: neo4j:5
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
-      NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_dbms_memory_heap_initial__size: 256m
-      NEO4J_dbms_memory_heap_max__size: 512m
-    ports:
-      - "7474:7474"
-      - "7687:7687"
+      # APOC plugin removed — avoids internet download on startup.
+      # Re-enable when offline APOC jar is mounted at /plugins/apoc.jar
+      # NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 128m
+    # No external port exposure — internal network only
+    networks:
+      - internal
     volumes:
       - neo4j_data:/data
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7474"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
       interval: 15s
       timeout: 10s
-      retries: 5
+      retries: 8
+      start_period: 60s
     restart: unless-stopped
     deploy:
       resources:
@@ -75,15 +95,30 @@ services:
 
   nats:
     image: nats:2.9-alpine
-    ports:
-      - "4222:4222"
-      - "8222:8222"
-    command: ["--http_port", "8222", "--jetstream", "--max_payload", "1MB"]
+    command: ["-c", "/etc/nats/nats-server.conf"]
+    volumes:
+      - ./deploy/nats/nats-server.conf:/etc/nats/nats-server.conf:ro
+      - ./deploy/nats/certs:/etc/nats/certs:ro
+    environment:
+      NATS_API_GATEWAY_PASSWORD: ${NATS_API_GATEWAY_PASSWORD}
+      NATS_IDENTITY_SERVICE_PASSWORD: ${NATS_IDENTITY_SERVICE_PASSWORD}
+      NATS_DISCOVERY_SERVICE_PASSWORD: ${NATS_DISCOVERY_SERVICE_PASSWORD}
+      NATS_GOVERNANCE_SERVICE_PASSWORD: ${NATS_GOVERNANCE_SERVICE_PASSWORD}
+      NATS_RISK_ENGINE_PASSWORD: ${NATS_RISK_ENGINE_PASSWORD}
+      NATS_AUDIT_SERVICE_PASSWORD: ${NATS_AUDIT_SERVICE_PASSWORD}
+      NATS_POLICY_ENGINE_PASSWORD: ${NATS_POLICY_ENGINE_PASSWORD}
+      NATS_GRAPH_SERVICE_PASSWORD: ${NATS_GRAPH_SERVICE_PASSWORD}
+      NATS_NOTIFICATION_SERVICE_PASSWORD: ${NATS_NOTIFICATION_SERVICE_PASSWORD}
+      NATS_WORKER_QUEUE_PASSWORD: ${NATS_WORKER_QUEUE_PASSWORD}
+    # No external port exposure — internal network only
+    networks:
+      - internal
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8222/healthz"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 3
+      start_period: 5s
     restart: unless-stopped
     deploy:
       resources:
@@ -103,19 +138,23 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://idmatr:${POSTGRES_PASSWORD}@postgres:5432/idmatr_db?schema=identity_service
       NATS_URL: nats://nats:4222
+      NATS_USER: identity_service
+      NATS_PASSWORD: ${NATS_IDENTITY_SERVICE_PASSWORD}
       NODE_ENV: ${NODE_ENV:-production}
     depends_on:
       postgres:
         condition: service_healthy
       nats:
         condition: service_healthy
+    networks:
+      - internal
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 45s
     deploy:
       resources:
         limits:
@@ -130,20 +169,37 @@ services:
       PORT: 3001
       DATABASE_URL: postgresql://idmatr:${POSTGRES_PASSWORD}@postgres:5432/idmatr_db?schema=discovery_service
       NATS_URL: nats://nats:4222
+      NATS_USER: discovery_service
+      NATS_PASSWORD: ${NATS_DISCOVERY_SERVICE_PASSWORD}
       NODE_ENV: ${NODE_ENV:-production}
-      DEMO_MODE: ${DEMO_MODE:-false}
+      DEMO_MODE: "false"
+      CONTROL_PLANE_INTERNAL_URL: http://control-plane:3010
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
+      GOOGLE_SERVICE_ACCOUNT_KEY: ${GOOGLE_SERVICE_ACCOUNT_KEY:-}
+      GOOGLE_ADMIN_EMAIL: ${GOOGLE_ADMIN_EMAIL:-}
+      GOOGLE_DOMAIN: ${GOOGLE_DOMAIN:-}
+      MS365_TENANT_ID: ${MS365_TENANT_ID:-}
+      MS365_CLIENT_ID: ${MS365_CLIENT_ID:-}
+      MS365_CLIENT_SECRET: ${MS365_CLIENT_SECRET:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_ORG: ${GITHUB_ORG:-}
+      SLACK_TOKEN: ${SLACK_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
       nats:
         condition: service_healthy
+      control-plane:
+        condition: service_started
+    networks:
+      - internal
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 45s
     deploy:
       resources:
         limits:
@@ -158,19 +214,23 @@ services:
       PORT: 3002
       DATABASE_URL: postgresql://idmatr:${POSTGRES_PASSWORD}@postgres:5432/idmatr_db?schema=governance_service
       NATS_URL: nats://nats:4222
+      NATS_USER: governance_service
+      NATS_PASSWORD: ${NATS_GOVERNANCE_SERVICE_PASSWORD}
       NODE_ENV: ${NODE_ENV:-production}
     depends_on:
       postgres:
         condition: service_healthy
       nats:
         condition: service_healthy
+    networks:
+      - internal
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 45s
     deploy:
       resources:
         limits:
@@ -185,19 +245,23 @@ services:
       PORT: 3003
       DATABASE_URL: postgresql://idmatr:${POSTGRES_PASSWORD}@postgres:5432/idmatr_db?schema=risk_engine
       NATS_URL: nats://nats:4222
+      NATS_USER: risk_engine
+      NATS_PASSWORD: ${NATS_RISK_ENGINE_PASSWORD}
       NODE_ENV: ${NODE_ENV:-production}
     depends_on:
       postgres:
         condition: service_healthy
       nats:
         condition: service_healthy
+    networks:
+      - internal
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3003/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 45s
     deploy:
       resources:
         limits:
@@ -212,19 +276,26 @@ services:
       PORT: 3004
       DATABASE_URL: postgresql://idmatr:${POSTGRES_PASSWORD}@postgres:5432/idmatr_db?schema=audit_service
       NATS_URL: nats://nats:4222
+      NATS_USER: audit_service
+      NATS_PASSWORD: ${NATS_AUDIT_SERVICE_PASSWORD}
       NODE_ENV: ${NODE_ENV:-production}
+      IMMUTABLE_AUDIT_SERVICE_PATH: /app/var/compliance/service-audit-ledger.ndjson
     depends_on:
       postgres:
         condition: service_healthy
       nats:
         condition: service_healthy
+    networks:
+      - internal
+    volumes:
+      - audit_ledger_data:/app/var/compliance
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3004/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 45s
     deploy:
       resources:
         limits:
@@ -239,19 +310,23 @@ services:
       PORT: 3005
       DATABASE_URL: postgresql://idmatr:${POSTGRES_PASSWORD}@postgres:5432/idmatr_db?schema=identity_service
       NATS_URL: nats://nats:4222
+      NATS_USER: policy_engine
+      NATS_PASSWORD: ${NATS_POLICY_ENGINE_PASSWORD}
       NODE_ENV: ${NODE_ENV:-production}
     depends_on:
       postgres:
         condition: service_healthy
       nats:
         condition: service_healthy
+    networks:
+      - internal
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3005/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 45s
     deploy:
       resources:
         limits:
@@ -268,20 +343,28 @@ services:
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}
       NATS_URL: nats://nats:4222
+      NATS_USER: graph_service
+      NATS_PASSWORD: ${NATS_GRAPH_SERVICE_PASSWORD}
       NODE_ENV: ${NODE_ENV:-production}
-      DEMO_MODE: ${DEMO_MODE:-false}
+      DEMO_MODE: "false"
+      CONTROL_PLANE_INTERNAL_URL: http://control-plane:3010
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
     depends_on:
       neo4j:
         condition: service_healthy
       nats:
         condition: service_healthy
+      control-plane:
+        condition: service_started
+    networks:
+      - internal
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3006/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 60s
     deploy:
       resources:
         limits:
@@ -295,6 +378,8 @@ services:
     environment:
       PORT: 3007
       NATS_URL: nats://nats:4222
+      NATS_USER: notification_service
+      NATS_PASSWORD: ${NATS_NOTIFICATION_SERVICE_PASSWORD}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
@@ -304,13 +389,15 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+    networks:
+      - internal
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3007/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 45s
     deploy:
       resources:
         limits:
@@ -323,21 +410,25 @@ services:
       dockerfile: services/worker-queue/Dockerfile
     environment:
       PORT: 3008
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_URL: ${REDIS_URL}
       NATS_URL: nats://nats:4222
+      NATS_USER: worker_queue
+      NATS_PASSWORD: ${NATS_WORKER_QUEUE_PASSWORD}
       NODE_ENV: ${NODE_ENV:-production}
     depends_on:
       redis:
         condition: service_healthy
       nats:
         condition: service_healthy
+    networks:
+      - internal
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3008/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 45s
     deploy:
       resources:
         limits:
@@ -357,37 +448,49 @@ services:
     environment:
       PORT: 3001
       JWT_SECRET: ${JWT_SECRET}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3002}
       NATS_URL: nats://nats:4222
+      NATS_USER: api_gateway
+      NATS_PASSWORD: ${NATS_API_GATEWAY_PASSWORD}
       NODE_ENV: ${NODE_ENV:-production}
+      DEMO_MODE: "false"
+      CONTROL_PLANE_INTERNAL_URL: http://control-plane:3010
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
+      REDIS_URL: ${REDIS_URL}
     depends_on:
+      redis:
+        condition: service_healthy
       nats:
         condition: service_healthy
       identity-service:
-        condition: service_healthy
+        condition: service_started
       discovery-service:
-        condition: service_healthy
+        condition: service_started
       governance-service:
-        condition: service_healthy
+        condition: service_started
       risk-engine:
-        condition: service_healthy
+        condition: service_started
       audit-service:
-        condition: service_healthy
+        condition: service_started
       policy-engine:
-        condition: service_healthy
+        condition: service_started
       graph-service:
-        condition: service_healthy
+        condition: service_started
       notification-service:
-        condition: service_healthy
+        condition: service_started
       worker-queue:
-        condition: service_healthy
+        condition: service_started
+    networks:
+      - internal
+      - edge
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 45s
     deploy:
       resources:
         limits:
@@ -402,17 +505,112 @@ services:
     build:
       context: apps/admin-dashboard
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
       NODE_ENV: ${NODE_ENV:-production}
     depends_on:
       api-gateway:
-        condition: service_healthy
+        condition: service_started
+    networks:
+      - edge
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+
+  # ─────────────────────────────────────────
+  # TENANT CONTROL PLANE
+  # ─────────────────────────────────────────
+
+  control-plane:
+    build:
+      context: .
+      dockerfile: apps/control-plane/Dockerfile
+    ports:
+      - "127.0.0.1:3010:3010"
+    environment:
+      PORT: 3010
+      CONTROL_PLANE_DATABASE_URL: postgresql://idmatr:${POSTGRES_PASSWORD}@postgres:5432/idmatr_db?schema=control_plane
+      CONTROL_PLANE_JWT_SECRET: ${CONTROL_PLANE_JWT_SECRET}
+      CONTROL_PLANE_JWT_EXPIRES_IN: ${CONTROL_PLANE_JWT_EXPIRES_IN:-8h}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY}
+      OPERATOR_EMAIL: ${OPERATOR_EMAIL:-}
+      OPERATOR_PASSWORD: ${OPERATOR_PASSWORD:-}
+      CONTROL_PLANE_UI_URL: ${CONTROL_PLANE_UI_URL:-http://localhost:3002}
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
+      REDIS_URL: ${REDIS_URL}
+      IMMUTABLE_AUDIT_LOG_PATH: /app/var/compliance/operator-audit-ledger.ndjson
+      RETENTION_SCAN_ENABLED: ${RETENTION_SCAN_ENABLED:-true}
+      RETENTION_SCAN_INTERVAL_MS: ${RETENTION_SCAN_INTERVAL_MS:-3600000}
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+      - edge
+    volumes:
+      - cp_audit_ledger_data:/app/var/compliance
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3010/control/system/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+
+  control-plane-ui:
+    build:
+      context: apps/control-plane-ui
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_CP_API_URL: ${NEXT_PUBLIC_CP_API_URL:-http://localhost:3010}
+    ports:
+      - "3002:3002"
+    environment:
+      NEXT_PUBLIC_CP_API_URL: ${NEXT_PUBLIC_CP_API_URL:-http://localhost:3010}
+      PORT: 3002
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      control-plane:
+        condition: service_started
+    networks:
+      - edge
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 192M
 
 volumes:
   postgres_data:
   redis_data:
   neo4j_data:
+  audit_ledger_data:
+  cp_audit_ledger_data:

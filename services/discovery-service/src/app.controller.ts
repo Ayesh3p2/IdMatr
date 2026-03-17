@@ -12,12 +12,17 @@ export class AppController {
   }
 
   @MessagePattern({ cmd: 'get_all_apps' })
-  async getAllApps() {
-    return this.appService.getAllApps();
+  async getAllApps(@Payload() data: { tenantId: string }) {
+    return this.appService.getAllApps(data.tenantId);
   }
 
   @MessagePattern({ cmd: 'trigger_scan' })
-  async triggerScan(@Payload() data: any) {
+  async triggerScan(@Payload() data: { tenantId: string; source?: string }) {
     return this.appService.triggerScan(data);
+  }
+
+  @MessagePattern({ cmd: 'get_app_intelligence' })
+  async getAppIntelligence(@Payload() data: { tenantId: string }) {
+    return this.appService.getAppIntelligence(data.tenantId);
   }
 }

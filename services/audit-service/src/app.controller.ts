@@ -17,7 +17,17 @@ export class AppController {
   }
 
   @MessagePattern({ cmd: 'get_audit_logs' })
-  async getAuditLogs(@Payload() filters: any) {
-    return this.appService.getLogs(filters);
+  async getAuditLogs(@Payload() data: { tenantId: string; filters?: any }) {
+    return this.appService.getLogs(data.tenantId, data.filters || {});
+  }
+
+  @Get('verify')
+  verifyIntegrity() {
+    return this.appService.verifyIntegrity();
+  }
+
+  @MessagePattern({ cmd: 'verify_audit_logs' })
+  async verifyAuditLogs(@Payload() data: { tenantId?: string }) {
+    return this.appService.verifyIntegrity(data.tenantId);
   }
 }

@@ -12,17 +12,32 @@ export class AppController {
   }
 
   @MessagePattern({ cmd: 'get_identity_graph' })
-  async getIdentityGraph(@Payload() data: { id: string }) {
-    return this.appService.getIdentityGraph(data.id);
+  async getIdentityGraph(@Payload() data: { id: string; tenantId: string }) {
+    return this.appService.getIdentityGraph(data.tenantId, data.id);
   }
 
   @MessagePattern({ cmd: 'get_toxic_combinations' })
-  async getToxicCombinations() {
-    return this.appService.getToxicCombinations();
+  async getToxicCombinations(@Payload() data: { tenantId: string }) {
+    return this.appService.getToxicCombinations(data.tenantId);
   }
 
   @MessagePattern({ cmd: 'get_attack_paths' })
-  async getAttackPaths() {
-    return this.appService.getAttackPaths();
+  async getAttackPaths(@Payload() data: { tenantId: string }) {
+    return this.appService.getAttackPaths(data.tenantId);
+  }
+
+  @MessagePattern({ cmd: 'get_privilege_creep' })
+  async getPrivilegeCreep(@Payload() data: { tenantId: string }) {
+    return this.appService.getPrivilegeCreep(data.tenantId);
+  }
+
+  @MessagePattern({ cmd: 'get_stale_access' })
+  async getStaleAccess(@Payload() data: { tenantId: string; staleDays?: number }) {
+    return this.appService.getStaleAccess(data.tenantId, data.staleDays);
+  }
+
+  @MessagePattern({ cmd: 'get_identity_risk_recommendations' })
+  async getIdentityRiskRecommendations(@Payload() data: { tenantId: string }) {
+    return this.appService.getIdentityRiskRecommendations(data.tenantId);
   }
 }

@@ -4,13 +4,15 @@ RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 COPY tsconfig*.json ./
 COPY packages/ ./packages/
-COPY node_modules/ ./node_modules/
+COPY services/worker-queue/package.json ./services/worker-queue/package.json
+RUN npm ci --ignore-scripts
 COPY services/worker-queue/ ./services/worker-queue/
 WORKDIR /app/services/worker-queue
-RUN node_modules/.bin/tsc --skipLibCheck 2>/dev/null; echo "build done"
+RUN /app/node_modules/.bin/tsc --skipLibCheck
+RUN test -f dist/main.js || (echo "ERROR: dist/main.js not found after TypeScript build" && ls -la dist/ 2>/dev/null && exit 1)
 
 FROM node:20-alpine AS runner
-RUN apk add --no-cache dumb-init wget
+RUN apk add --no-cache dumb-init wget openssl
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/services/worker-queue/dist ./dist

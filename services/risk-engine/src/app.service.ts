@@ -7,20 +7,21 @@ export class AppService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async getRiskScores() {
-    return this.prisma.riskProfile.findMany();
+  async getRiskScores(tenantId: string) {
+    return this.prisma.riskProfile.findMany({ where: { tenantId } });
   }
 
-  async getRiskEvents() {
+  async getRiskEvents(tenantId: string) {
     return this.prisma.riskEvent.findMany({
+      where: { tenantId },
       orderBy: { timestamp: 'desc' },
     });
   }
 
-  async getITDRThreats() {
-    // Return active ITDR threats from risk events with high severity
+  async getITDRThreats(tenantId: string) {
     const events = await this.prisma.riskEvent.findMany({
       where: {
+        tenantId,
         severity: { in: ['critical', 'high'] },
         resolved: false,
       },
@@ -41,8 +42,10 @@ export class AppService {
     }));
   }
 
-  async respondToThreat(id: string, action: string, notes?: string) {
+  async respondToThreat(tenantId: string, id: string, action: string, notes?: string) {
     const eventId = id.replace('T-', '');
+    const event = await this.prisma.riskEvent.findFirst({ where: { id: eventId, tenantId } });
+    if (!event) throw new Error(`Threat ${id} not found for tenant ${tenantId}`);
     return this.prisma.riskEvent.update({
       where: { id: eventId },
       data: {
@@ -52,13 +55,13 @@ export class AppService {
     });
   }
 
-  async getRiskTrends() {
+  async getRiskTrends(tenantId: string) {
     const events = await this.prisma.riskEvent.findMany({
+      where: { tenantId },
       orderBy: { timestamp: 'desc' },
       take: 1000,
     });
 
-    // Group by month and calculate average risk
     const monthlyData: Record<string, number[]> = {};
     events.forEach(event => {
       const month = event.timestamp.toISOString().slice(0, 7);
@@ -74,16 +77,15 @@ export class AppService {
     }));
   }
 
-  async detectITDRPatterns(userId: string) {
+  async detectITDRPatterns(tenantId: string, userId: string) {
     const userEvents = await this.prisma.riskEvent.findMany({
-      where: { userId },
+      where: { tenantId, userId },
       orderBy: { timestamp: 'desc' },
       take: 50,
     });
 
     const patterns = [];
 
-    // Detect impossible travel (multiple login locations in short time)
     const loginEvents = userEvents.filter(e => e.type === 'abnormal_behavior');
     if (loginEvents.length >= 2) {
       patterns.push({
@@ -94,7 +96,6 @@ export class AppService {
       });
     }
 
-    // Detect privilege escalation
     const privEvents = userEvents.filter(e => e.type === 'privilege_escalation');
     if (privEvents.length > 0) {
       patterns.push({
@@ -105,7 +106,6 @@ export class AppService {
       });
     }
 
-    // Detect dormant account activation
     const dormantEvents = userEvents.filter(e => e.type === 'dormant_account');
     if (dormantEvents.length > 0) {
       patterns.push({
@@ -119,11 +119,11 @@ export class AppService {
     return { userId, patterns, detectedAt: new Date() };
   }
 
-  async calculateRisk(targetId: string, targetType: string) {
-    this.logger.log(`Calculating risk for ${targetType}: ${targetId}`);
+  async calculateRisk(tenantId: string, targetId: string, targetType: string) {
+    this.logger.log(`Calculating risk for ${targetType}: ${targetId} tenant: ${tenantId}`);
 
     const events = await this.prisma.riskEvent.findMany({
-      where: { userId: targetId },
+      where: { tenantId, userId: targetId },
     });
 
     const weights = { critical: 40, high: 20, medium: 10, low: 5 };
@@ -134,7 +134,6 @@ export class AppService {
     events.forEach(event => {
       const severity = (event.severity?.toLowerCase() || 'low') as keyof typeof weights;
       totalScore += weights[severity] || weights.low;
-
       if (!latestEventDate || event.timestamp > latestEventDate) {
         latestEventDate = event.timestamp;
       }
@@ -142,25 +141,16 @@ export class AppService {
 
     if (latestEventDate) {
       const now = new Date();
-      const diffTime = Math.abs(now.getTime() - latestEventDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const diffDays = Math.ceil(Math.abs(now.getTime() - (latestEventDate as Date).getTime()) / (1000 * 60 * 60 * 24));
       totalScore = Math.max(0, totalScore - (diffDays * 2));
     }
 
     const finalScore = Math.min(100, totalScore);
 
     return this.prisma.riskProfile.upsert({
-      where: { targetId },
-      update: {
-        currentScore: finalScore,
-        lastUpdated: new Date(),
-      },
-      create: {
-        targetId,
-        targetType,
-        baseScore: 50,
-        currentScore: finalScore,
-      },
+      where: { tenantId_targetId: { tenantId, targetId } },
+      update: { currentScore: finalScore, lastUpdated: new Date() },
+      create: { tenantId, targetId, targetType, baseScore: 50, currentScore: finalScore },
     });
   }
 

@@ -12,27 +12,29 @@ export class AppController {
   }
 
   @MessagePattern({ cmd: 'get_all_workflows' })
-  async getAllWorkflows() {
-    return this.appService.getAllWorkflows();
+  async getAllWorkflows(@Payload() data: { tenantId: string }) {
+    return this.appService.getAllWorkflows(data.tenantId);
   }
 
   @MessagePattern({ cmd: 'create_workflow' })
-  async createWorkflow(@Payload() data: any) {
-    return this.appService.createWorkflow(data);
+  async createWorkflow(@Payload() data: { tenantId: string; [key: string]: any }) {
+    const { tenantId, ...rest } = data;
+    return this.appService.createWorkflow(tenantId, rest);
   }
 
   @MessagePattern({ cmd: 'update_workflow' })
-  async updateWorkflow(@Payload() data: any) {
-    return this.appService.updateWorkflow(data.id, data.action, data.approverId, data.comment);
+  async updateWorkflow(@Payload() data: { tenantId: string; id: string; action: string; approverId: string; comment?: string }) {
+    return this.appService.updateWorkflow(data.tenantId, data.id, data.action, data.approverId, data.comment);
   }
 
   @MessagePattern({ cmd: 'get_jml_events' })
-  async getJMLEvents() {
-    return this.appService.getJMLEvents();
+  async getJMLEvents(@Payload() data: { tenantId: string }) {
+    return this.appService.getJMLEvents(data.tenantId);
   }
 
   @MessagePattern({ cmd: 'create_jml_event' })
-  async createJMLEvent(@Payload() data: any) {
-    return this.appService.createJMLEvent(data);
+  async createJMLEvent(@Payload() data: { tenantId: string; [key: string]: any }) {
+    const { tenantId, ...rest } = data;
+    return this.appService.createJMLEvent(tenantId, rest);
   }
 }

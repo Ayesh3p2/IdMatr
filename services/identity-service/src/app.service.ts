@@ -8,18 +8,19 @@ export class AppService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async getAllIdentities(): Promise<User[]> {
+  async getAllIdentities(tenantId: string): Promise<User[]> {
     return this.prisma.user.findMany({
+      where: { tenantId },
       include: {
         accessGrants: true,
       },
     });
   }
 
-  async getIdentity(id: string): Promise<User | null> {
-    this.logger.log(`Getting identity: ${id}`);
-    return this.prisma.user.findUnique({
-      where: { id },
+  async getIdentity(tenantId: string, id: string): Promise<User | null> {
+    this.logger.log(`Getting identity: ${id} for tenant: ${tenantId}`);
+    return this.prisma.user.findFirst({
+      where: { id, tenantId },
       include: {
         accessGrants: {
           include: {
@@ -31,9 +32,10 @@ export class AppService {
     });
   }
 
-  async createUser(data: any): Promise<User> {
+  async createUser(tenantId: string, data: any): Promise<User> {
     return this.prisma.user.create({
       data: {
+        tenantId,
         email: data.email,
         name: data.name,
         status: data.status || 'active',
@@ -43,18 +45,21 @@ export class AppService {
     });
   }
 
-  async updateUserRisk(id: string, score: number): Promise<User> {
+  async updateUserRisk(tenantId: string, id: string, score: number): Promise<User> {
+    // Verify user belongs to tenant before update
+    const user = await this.prisma.user.findFirst({ where: { id, tenantId } });
+    if (!user) throw new Error(`User ${id} not found for tenant ${tenantId}`);
     return this.prisma.user.update({
       where: { id },
       data: { riskScore: score },
     });
   }
 
-  async getIdentityAnalytics() {
+  async getIdentityAnalytics(tenantId: string) {
     const [users, apps, grants] = await Promise.all([
-      this.prisma.user.findMany(),
-      this.prisma.application.findMany(),
-      this.prisma.accessGrant.findMany({ where: { status: 'active' } }),
+      this.prisma.user.findMany({ where: { tenantId } }),
+      this.prisma.application.findMany({ where: { tenantId } }),
+      this.prisma.accessGrant.findMany({ where: { tenantId, status: 'active' } }),
     ]);
 
     const highRisk = users.filter(u => (u.riskScore || 0) > 70).length;

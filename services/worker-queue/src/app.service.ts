@@ -1,17 +1,29 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { Queue } from 'bullmq';
-import IORedis from 'ioredis';
+import { Queue, QueueEvents } from 'bullmq';
 import { RpcException } from '@nestjs/microservices';
 
 @Injectable()
 export class AppService implements OnModuleInit {
   private readonly logger = new Logger(AppService.name);
   private queue: Queue;
-  private redis: IORedis;
+  private queueEvents: QueueEvents;
 
   onModuleInit() {
-    this.redis = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379');
-    this.queue = new Queue('idmatr-jobs', { connection: this.redis });
+    if (!process.env.REDIS_URL) {
+      throw new Error('REDIS_URL env var is required');
+    }
+    this.queue = new Queue('idmatr-jobs', { 
+      connection: {
+        host: new URL(process.env.REDIS_URL).hostname,
+        port: parseInt(new URL(process.env.REDIS_URL).port || '6379'),
+      }
+    });
+    this.queueEvents = new QueueEvents('idmatr-jobs', {
+      connection: {
+        host: new URL(process.env.REDIS_URL).hostname,
+        port: parseInt(new URL(process.env.REDIS_URL).port || '6379'),
+      }
+    });
     this.logger.log('BullMQ initialized on idmatr-jobs queue');
   }
 

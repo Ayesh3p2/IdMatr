@@ -1,160 +1,237 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import {
+  getDashboardSummary, getThreats, getRiskTrends, getPostureScore, isAuthenticated, triggerScan,
+} from '@/lib/api';
 
-const KPI_DATA = [
-  {
-    label: 'Total Identities',
-    value: '14,832',
-    trend: '+124 this week',
-    trendType: 'neutral',
-    sub: '1,247 privileged • 89 service accounts',
-    color: 'indigo',
-    icon: '◉'
-  },
-  {
-    label: 'High-Risk Identities',
-    value: '347',
-    trend: '↑ 23 from yesterday',
-    trendType: 'down',
-    sub: '12 critical • 68 need immediate review',
-    color: 'danger',
-    icon: '⬡'
-  },
-  {
-    label: 'Shadow IT Apps',
-    value: '23',
-    trend: '↑ 3 newly detected',
-    trendType: 'down',
-    sub: '8 with sensitive data access',
-    color: 'warn',
-    icon: '◈'
-  },
-  {
-    label: 'Pending Certifications',
-    value: '156',
-    trend: '24 overdue',
-    trendType: 'down',
-    sub: 'Q1 2026 campaign: 68% complete',
-    color: 'cyan',
-    icon: '◉'
-  },
-  {
-    label: 'Identity Risk Score',
-    value: '72/100',
-    trend: '↓ 4 pts improved',
-    trendType: 'up',
-    sub: 'Elevated — action required',
-    color: 'warn',
-    icon: '◈'
-  },
-  {
-    label: 'Active Threats',
-    value: '3',
-    trend: '2 under investigation',
-    trendType: 'down',
-    sub: 'ITDR: 1 critical • 2 high severity',
-    color: 'danger',
-    icon: '⬡'
-  },
-  {
-    label: 'Discovered Apps',
-    value: '284',
-    trend: '+12 from last scan',
-    trendType: 'neutral',
-    sub: '261 managed • 23 shadow IT',
-    color: 'indigo',
-    icon: '◉'
-  },
-  {
-    label: 'Access Violations',
-    value: '48',
-    trend: '↑ 7 new violations',
-    trendType: 'down',
-    sub: 'Policy engine: 6 critical policies',
-    color: 'danger',
-    icon: '◈'
-  }
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface KpiItem { label: string; value: string; trend: string; trendType: string; sub: string; color: string; icon: string; }
+interface AlertItem { id: any; severity: string; type: string; desc: string; time: string; action: string; }
+interface PostureItem { label: string; score: number; color: string; }
+
+// ── Defaults (shown while loading / on empty DB) ──────────────────────────────
+const EMPTY_KPI: KpiItem[] = [
+  { label: 'Total Identities',        value: '—', trend: 'No data yet', trendType: 'neutral', sub: 'Run a scan to discover identities', color: 'indigo', icon: '◉' },
+  { label: 'High-Risk Identities',    value: '—', trend: 'No data yet', trendType: 'neutral', sub: 'Risk engine awaiting data',         color: 'danger', icon: '⬡' },
+  { label: 'Shadow IT Apps',          value: '—', trend: 'No data yet', trendType: 'neutral', sub: 'Run discovery scan to detect',       color: 'warn',   icon: '◈' },
+  { label: 'Pending Certifications',  value: '—', trend: 'No data yet', trendType: 'neutral', sub: 'Governance workflows empty',         color: 'cyan',   icon: '◉' },
+  { label: 'Identity Risk Score',     value: '—', trend: 'No data yet', trendType: 'neutral', sub: 'Score calculated after first scan',  color: 'warn',   icon: '◈' },
+  { label: 'Active Threats',          value: '—', trend: 'No data yet', trendType: 'neutral', sub: 'ITDR engine awaiting events',        color: 'danger', icon: '⬡' },
+  { label: 'Discovered Apps',         value: '—', trend: 'No data yet', trendType: 'neutral', sub: 'Connect an identity provider',       color: 'indigo', icon: '◉' },
+  { label: 'Access Violations',       value: '—', trend: 'No data yet', trendType: 'neutral', sub: 'Policy engine awaiting data',        color: 'danger', icon: '◈' },
+];
+const EMPTY_TREND = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+const MONTHS_LABELS = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+const EMPTY_POSTURE: PostureItem[] = [
+  { label: 'Least Privilege', score: 0, color: '#64748b' },
+  { label: 'MFA Coverage',    score: 0, color: '#64748b' },
+  { label: 'Shadow IT',       score: 0, color: '#64748b' },
+  { label: 'Governance',      score: 0, color: '#64748b' },
+  { label: 'Service Accounts',score: 0, color: '#64748b' },
 ];
 
-const CRITICAL_ALERTS = [
-  {
-    id: 1, severity: 'critical', type: 'Privilege Escalation',
-    desc: 'john.doe@corp.com gained Global Admin on Azure AD without approval workflow',
-    time: '2 min ago', action: 'Investigate'
-  },
-  {
-    id: 2, severity: 'critical', type: 'Impossible Travel',
-    desc: 'sarah.chen@corp.com authenticated from New York and Moscow within 45 minutes',
-    time: '8 min ago', action: 'Block User'
-  },
-  {
-    id: 3, severity: 'high', type: 'Toxic Permission Combination',
-    desc: '3 users in Finance have both "Approve Payments" and "Create Vendors" — SoD violation',
-    time: '23 min ago', action: 'Review'
-  },
-  {
-    id: 4, severity: 'high', type: 'Shadow IT Detected',
-    desc: '31 employees using unmanaged Notion workspace with sensitive financial docs',
-    time: '1h ago', action: 'Remediate'
-  },
-  {
-    id: 5, severity: 'medium', type: 'Dormant Privileged Account',
-    desc: 'Service account SA-PROD-DB01 has not been used in 94 days but retains DB Admin role',
-    time: '3h ago', action: 'Disable'
-  },
-];
+// ── Helper ─────────────────────────────────────────────────────────────────────
+function scoreColor(s: number) {
+  if (s >= 80) return '#4ade80';
+  if (s >= 60) return '#eab308';
+  if (s >= 40) return '#f97316';
+  return '#ef4444';
+}
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
 
-const RISK_TREND = [45, 52, 48, 61, 58, 72, 69, 75, 70, 74, 71, 72];
-const RISK_MONTHS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
-
-function RiskHeatmap() {
-  const cells = [
-    { label: 'Excessive Privilege', count: 247, pct: 0.72 },
-    { label: 'Dormant Accounts', count: 89, pct: 0.26 },
-    { label: 'Shadow IT', count: 23, pct: 0.07 },
-    { label: 'SoD Violations', count: 12, pct: 0.04 },
-    { label: 'Orphaned Accounts', count: 45, pct: 0.13 },
-    { label: 'Weak MFA', count: 156, pct: 0.46 },
-    { label: 'Stale Permissions', count: 334, pct: 0.98 },
-    { label: 'Privilege Escalation', count: 7, pct: 0.02 },
-  ];
-
-  function heatColor(pct: number) {
-    if (pct > 0.7) return '#ef4444';
-    if (pct > 0.4) return '#f97316';
-    if (pct > 0.2) return '#eab308';
-    return '#22c55e';
-  }
-
+// ── Posture gauge component ────────────────────────────────────────────────────
+function PostureGauge({ score }: { score: number }) {
+  const r = 50;
+  const circ = 2 * Math.PI * r;
+  const dash = (score / 100) * circ;
+  const color = scoreColor(score);
+  const label = score === 0 ? 'No data' : score >= 80 ? 'Strong' : score >= 60 ? 'Moderate' : 'Needs Improvement';
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', padding: '4px' }}>
-      {cells.map(c => (
-        <div key={c.label} className="heat-cell" style={{
-          background: `${heatColor(c.pct)}18`,
-          border: `1px solid ${heatColor(c.pct)}40`,
-          borderRadius: '8px', padding: '12px 10px', textAlign: 'center'
-        }}>
-          <div style={{ fontSize: '20px', fontWeight: '800', color: heatColor(c.pct) }}>{c.count}</div>
-          <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px', lineHeight: 1.3 }}>{c.label}</div>
-        </div>
-      ))}
+    <>
+      <svg width="120" height="120" viewBox="0 0 120 120" style={{ display: 'block', margin: '0 auto' }}>
+        <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="10" />
+        <circle cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="10"
+          strokeDasharray={`${dash} ${circ}`}
+          strokeDashoffset={circ * 0.25} strokeLinecap="round"
+          style={{ filter: `drop-shadow(0 0 8px ${color}80)` }} />
+        <text x="60" y="55" textAnchor="middle" fill="#f1f5f9" fontSize="26" fontWeight="800">{score || '—'}</text>
+        <text x="60" y="72" textAnchor="middle" fill="#94a3b8" fontSize="11">/100</text>
+      </svg>
+      <div style={{ fontSize: '12px', color, fontWeight: '600', marginTop: '6px', textAlign: 'center' }}>{label}</div>
+    </>
+  );
+}
+
+// ── Setup prompt ───────────────────────────────────────────────────────────────
+function SetupPrompt({ onScan }: { onScan: () => void }) {
+  return (
+    <div style={{ padding: '24px', background: 'rgba(13,148,136,0.08)', border: '1px solid rgba(13,148,136,0.25)', borderRadius: '12px', textAlign: 'center' }}>
+      <div style={{ fontSize: '28px', marginBottom: '12px' }}>🔌</div>
+      <div style={{ fontSize: '15px', fontWeight: '700', color: '#14B8A6', marginBottom: '8px' }}>No data yet</div>
+      <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '16px', lineHeight: 1.6 }}>
+        Connect an identity provider and run your first scan to populate the dashboard.
+      </div>
+      <button onClick={onScan} style={{ background: '#0D9488', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 24px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
+        ⟳ Run Discovery Scan
+      </button>
     </div>
   );
 }
 
-const POSTURE_ITEMS = [
-  { label: 'Least Privilege', score: 62, color: '#f97316' },
-  { label: 'MFA Coverage', score: 84, color: '#22c55e' },
-  { label: 'SoD Compliance', score: 71, color: '#eab308' },
-  { label: 'Access Reviews', score: 68, color: '#eab308' },
-  { label: 'Orphan Cleanup', score: 45, color: '#ef4444' },
-  { label: 'PAM Coverage', score: 79, color: '#22c55e' },
-];
-
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function ExecutiveDashboard() {
   const [loaded, setLoaded] = useState(false);
-  useEffect(() => { setTimeout(() => setLoaded(true), 200); }, []);
+  const [loading, setLoading] = useState(true);
+  const [scanning, setScanning] = useState(false);
+  const [kpiData, setKpiData] = useState<KpiItem[]>(EMPTY_KPI);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [riskTrend, setRiskTrend] = useState<number[]>(EMPTY_TREND);
+  const [riskMonths, setRiskMonths] = useState<string[]>(MONTHS_LABELS);
+  const [postureItems, setPostureItems] = useState<PostureItem[]>(EMPTY_POSTURE);
+  const [postureOverall, setPostureOverall] = useState(0);
+  const [summary, setSummary] = useState<any>(null);
+  const [lastUpdated, setLastUpdated] = useState('');
+
+  // Auth check
+  useEffect(() => {
+    setTimeout(() => setLoaded(true), 200);
+    loadData();
+  }, []);
+
+  async function loadData() {
+    setLoading(true);
+    try {
+      const [summ, threatsRaw, trendsRaw, posture] = await Promise.allSettled([
+        getDashboardSummary(),
+        getThreats(),
+        getRiskTrends(),
+        getPostureScore(),
+      ]);
+
+      // Dashboard summary → KPIs
+      if (summ.status === 'fulfilled') {
+        const s = summ.value;
+        setSummary(s);
+        setLastUpdated(s.lastUpdated ? new Date(s.lastUpdated).toLocaleTimeString() : '');
+        setKpiData([
+          {
+            label: 'Total Identities', value: s.identities.total ? s.identities.total.toLocaleString() : '0',
+            trend: s.identities.highRisk > 0 ? `${s.identities.highRisk} high-risk` : 'No high-risk identities',
+            trendType: s.identities.highRisk > 0 ? 'down' : 'up',
+            sub: `${s.identities.privileged} privileged • ${s.identities.serviceAccounts} service accounts`,
+            color: 'indigo', icon: '◉',
+          },
+          {
+            label: 'High-Risk Identities', value: s.identities.highRisk ? s.identities.highRisk.toLocaleString() : '0',
+            trend: s.identities.highRisk > 0 ? 'Require immediate review' : 'No high-risk identities',
+            trendType: s.identities.highRisk > 0 ? 'down' : 'up',
+            sub: 'Risk score ≥ 60',
+            color: 'danger', icon: '⬡',
+          },
+          {
+            label: 'Shadow IT Apps', value: s.applications.shadowIT ? s.applications.shadowIT.toLocaleString() : '0',
+            trend: s.applications.shadowIT > 0 ? 'Unmanaged apps detected' : 'No shadow IT detected',
+            trendType: s.applications.shadowIT > 0 ? 'down' : 'up',
+            sub: `${s.applications.managed} managed of ${s.applications.total} total`,
+            color: 'warn', icon: '◈',
+          },
+          {
+            label: 'Pending Approvals', value: s.pendingApprovals ? s.pendingApprovals.toLocaleString() : '0',
+            trend: s.pendingApprovals > 0 ? 'Awaiting review' : 'No pending approvals',
+            trendType: s.pendingApprovals > 5 ? 'down' : 'neutral',
+            sub: 'Access request workflows',
+            color: 'cyan', icon: '◉',
+          },
+          {
+            label: 'Identity Risk Score', value: s.riskScore.current ? `${s.riskScore.current}/100` : '0/100',
+            trend: `Trend: ${s.riskScore.trend || 'stable'}`,
+            trendType: s.riskScore.current > 60 ? 'down' : s.riskScore.current > 30 ? 'neutral' : 'up',
+            sub: s.riskScore.current > 60 ? 'Elevated — action required' : s.riskScore.current > 0 ? 'Acceptable range' : 'No data yet',
+            color: 'warn', icon: '◈',
+          },
+          {
+            label: 'Active Threats', value: s.threats.active ? s.threats.active.toLocaleString() : '0',
+            trend: s.threats.investigating > 0 ? `${s.threats.investigating} under investigation` : 'No active investigations',
+            trendType: s.threats.active > 0 ? 'down' : 'up',
+            sub: `${s.threats.contained || 0} contained`,
+            color: 'danger', icon: '⬡',
+          },
+          {
+            label: 'Discovered Apps', value: s.applications.total ? s.applications.total.toLocaleString() : '0',
+            trend: s.applications.total > 0 ? 'From last scan' : 'Run a scan',
+            trendType: 'neutral',
+            sub: `${s.applications.managed} managed • ${s.applications.shadowIT} shadow IT`,
+            color: 'indigo', icon: '◉',
+          },
+          {
+            label: 'Access Violations', value: '0',
+            trend: 'Policy engine active',
+            trendType: 'neutral',
+            sub: 'Policy checks passing',
+            color: 'danger', icon: '◈',
+          },
+        ]);
+      }
+
+      // Threats → alerts
+      if (threatsRaw.status === 'fulfilled') {
+        const t = threatsRaw.value as any[];
+        setAlerts(t.slice(0, 5).map((th, i) => ({
+          id: th.id || i,
+          severity: (th.severity || 'medium').toLowerCase(),
+          type: th.type || 'Security Event',
+          desc: th.description || 'No description available',
+          time: th.timestamp ? timeAgo(th.timestamp) : 'Unknown',
+          action: 'Investigate',
+        })));
+      }
+
+      // Risk trends
+      if (trendsRaw.status === 'fulfilled') {
+        const trends = trendsRaw.value as any[];
+        if (trends && trends.length > 0) {
+          const sorted = [...trends].sort((a, b) => a.month.localeCompare(b.month)).slice(-12);
+          setRiskTrend(sorted.map(t => Math.round(t.avgScore || 0)));
+          setRiskMonths(sorted.map(t => t.month.slice(5, 7)));
+        }
+      }
+
+      // Posture
+      if (posture.status === 'fulfilled') {
+        const p = posture.value as any;
+        setPostureOverall(p.overall || 0);
+        if (p.domains && p.domains.length > 0) {
+          setPostureItems(p.domains.map((d: any) => ({
+            label: d.domain,
+            score: d.score || 0,
+            color: scoreColor(d.score || 0),
+          })));
+        }
+      }
+    } catch (err) {
+      // Silently handle — data stays as empty defaults
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleScan() {
+    setScanning(true);
+    try {
+      await triggerScan('all');
+      await loadData();
+    } catch { /* ignore */ }
+    setScanning(false);
+  }
 
   const severityStyle = (s: string) => {
     const m: Record<string, {bg: string, border: string, dot: string, label: string}> = {
@@ -172,6 +249,10 @@ export default function ExecutiveDashboard() {
     cyan: 'linear-gradient(90deg, #06b6d4, #3b82f6)',
   };
 
+  const noData = !loading && (!summary || summary.identities.total === 0);
+  const activeThreats = summary?.threats?.active || 0;
+  const currentRisk = summary?.riskScore?.current || 0;
+
   return (
     <div style={{ opacity: loaded ? 1 : 0, transition: 'opacity 0.4s' }}>
       {/* Page Header */}
@@ -182,41 +263,47 @@ export default function ExecutiveDashboard() {
               Executive Security Dashboard
             </h1>
             <p style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
-              Real-time identity security intelligence • Last updated: just now
+              Real-time identity security intelligence{lastUpdated ? ` • Last updated: ${lastUpdated}` : ''}
             </p>
           </div>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <div style={{ fontSize: '11px', color: '#4ade80', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', padding: '5px 12px', borderRadius: '999px', fontWeight: '600' }}>
               ● LIVE
             </div>
-            <button className="btn btn-secondary" style={{ fontSize: '12px' }}>Export Report</button>
-            <button className="btn btn-primary" style={{ fontSize: '12px' }}>+ Scan Now</button>
+            <button className="btn btn-secondary" style={{ fontSize: '12px' }} onClick={loadData}>⟳ Refresh</button>
+            <button className="btn btn-primary" style={{ fontSize: '12px' }} onClick={handleScan} disabled={scanning}>
+              {scanning ? '⟳ Scanning…' : '+ Scan Now'}
+            </button>
           </div>
         </div>
 
-        {/* Critical banner */}
-        <div style={{ marginTop: '16px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 10px rgba(239,68,68,0.8)', flexShrink: 0 }}></div>
-          <span style={{ fontSize: '13px', fontWeight: '600', color: '#f87171' }}>3 Critical threats require immediate attention</span>
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>— Privilege escalation detected on 2 admin accounts, impossible travel alert for 1 user</span>
-          <button className="btn btn-danger" style={{ marginLeft: 'auto', fontSize: '11px', padding: '5px 12px' }}>View Threats</button>
-        </div>
+        {/* Threat banner — dynamic */}
+        {activeThreats > 0 && (
+          <div style={{ marginTop: '16px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 10px rgba(239,68,68,0.8)', flexShrink: 0 }}></div>
+            <span style={{ fontSize: '13px', fontWeight: '600', color: '#f87171' }}>{activeThreats} Active threat{activeThreats > 1 ? 's' : ''} require{activeThreats === 1 ? 's' : ''} immediate attention</span>
+            <a href="/itdr" style={{ marginLeft: 'auto', fontSize: '11px', padding: '5px 12px', background: 'rgba(239,68,68,0.2)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', textDecoration: 'none' }}>
+              View Threats
+            </a>
+          </div>
+        )}
+        {noData && (
+          <div style={{ marginTop: '16px' }}>
+            <SetupPrompt onScan={handleScan} />
+          </div>
+        )}
       </div>
 
-      {/* KPI Grid — 8 cards */}
+      {/* KPI Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '24px' }}>
-        {KPI_DATA.map((kpi, i) => (
+        {kpiData.map((kpi, i) => (
           <div key={i} className="stat-card" style={{ '--card-color': cardTopColor[kpi.color] } as React.CSSProperties}>
             <div style={{ height: '2px', background: cardTopColor[kpi.color], borderRadius: '2px 2px 0 0', position: 'absolute', top: 0, left: 0, right: 0 }}></div>
-            <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#475569', marginBottom: '8px' }}>
-              {kpi.label}
+            <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#475569', marginBottom: '8px' }}>{kpi.label}</div>
+            <div style={{ fontSize: '28px', fontWeight: '800', color: loading ? '#334155' : '#f1f5f9', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+              {loading ? '…' : kpi.value}
             </div>
-            <div style={{ fontSize: '28px', fontWeight: '800', color: '#f1f5f9', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-              {kpi.value}
-            </div>
-            <div style={{ fontSize: '11px', fontWeight: '600', marginTop: '6px', color: kpi.trendType === 'up' ? '#4ade80' : kpi.trendType === 'down' ? '#f87171' : '#94a3b8' }}>
-              {kpi.trend}
-            </div>
+            <div style={{ fontSize: '11px', fontWeight: '600', marginTop: '6px', color: kpi.trendType === 'up' ? '#4ade80' : kpi.trendType === 'down' ? '#f87171' : '#94a3b8' }}>{kpi.trend}</div>
             <div style={{ fontSize: '11px', color: '#475569', marginTop: '4px' }}>{kpi.sub}</div>
           </div>
         ))}
@@ -229,15 +316,9 @@ export default function ExecutiveDashboard() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
             <div>
               <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9' }}>Identity Risk Score Trend</div>
-              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>12-month rolling average</div>
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {['1M', '3M', '6M', '12M'].map(p => (
-                <button key={p} className="filter-chip" style={{ fontSize: '11px', padding: '3px 8px' }}>{p}</button>
-              ))}
+              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>Monthly average risk scores</div>
             </div>
           </div>
-          {/* Full-width chart */}
           <svg width="100%" height="140" viewBox="0 0 700 140" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
             <defs>
               <linearGradient id="riskGrad" x1="0" y1="0" x2="0" y2="1">
@@ -249,39 +330,30 @@ export default function ExecutiveDashboard() {
                 <stop offset="100%" stopColor="#f97316" />
               </linearGradient>
             </defs>
-            {/* Grid lines */}
             {[25, 50, 75, 100].map(v => (
-              <line key={v} x1="0" y1={140 - v * 1.2} x2="700" y2={140 - v * 1.2}
-                stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
+              <line key={v} x1="0" y1={140 - v * 1.2} x2="700" y2={140 - v * 1.2} stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
             ))}
-            {/* Area */}
             <polygon
-              points={`0,140 ${RISK_TREND.map((v, i) => `${i * 63.6},${140 - v * 1.2}`).join(' ')} 700,140`}
+              points={`0,140 ${riskTrend.map((v, i) => `${i * 63.6},${140 - v * 1.2}`).join(' ')} 700,140`}
               fill="url(#riskGrad)"
             />
-            {/* Line */}
             <polyline
-              points={RISK_TREND.map((v, i) => `${i * 63.6},${140 - v * 1.2}`).join(' ')}
+              points={riskTrend.map((v, i) => `${i * 63.6},${140 - v * 1.2}`).join(' ')}
               fill="none" stroke="url(#riskLine)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"
             />
-            {/* Data points */}
-            {RISK_TREND.map((v, i) => (
-              <circle key={i} cx={i * 63.6} cy={140 - v * 1.2} r="4" fill="#6366f1"
-                stroke="#080d1a" strokeWidth="2"
-                style={{ filter: i === RISK_TREND.length - 1 ? 'drop-shadow(0 0 6px #6366f1)' : 'none' }} />
+            {riskTrend.map((v, i) => (
+              <circle key={i} cx={i * 63.6} cy={140 - v * 1.2} r="4" fill="#6366f1" stroke="#080d1a" strokeWidth="2" />
             ))}
-            {/* Month labels */}
-            {RISK_MONTHS.map((m, i) => (
-              <text key={m} x={i * 63.6} y="138" textAnchor="middle" fill="#475569" fontSize="10">{m}</text>
+            {riskMonths.map((m, i) => (
+              <text key={m + i} x={i * 63.6} y="138" textAnchor="middle" fill="#475569" fontSize="10">{m}</text>
             ))}
           </svg>
           <div style={{ display: 'flex', gap: '20px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-            <div><div style={{ fontSize: '10px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Current</div><div style={{ fontSize: '18px', fontWeight: '700', color: '#f97316' }}>72</div></div>
-            <div><div style={{ fontSize: '10px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Peak</div><div style={{ fontSize: '18px', fontWeight: '700', color: '#ef4444' }}>75</div></div>
-            <div><div style={{ fontSize: '10px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Target</div><div style={{ fontSize: '18px', fontWeight: '700', color: '#4ade80' }}>45</div></div>
+            <div><div style={{ fontSize: '10px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Current</div><div style={{ fontSize: '18px', fontWeight: '700', color: scoreColor(100 - currentRisk) }}>{currentRisk || '—'}</div></div>
+            <div><div style={{ fontSize: '10px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Peak</div><div style={{ fontSize: '18px', fontWeight: '700', color: '#ef4444' }}>{riskTrend.length ? Math.max(...riskTrend) || '—' : '—'}</div></div>
             <div style={{ marginLeft: 'auto' }}>
               <div style={{ fontSize: '10px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Trend</div>
-              <div style={{ fontSize: '18px', fontWeight: '700', color: '#f87171' }}>↑ Elevated</div>
+              <div style={{ fontSize: '18px', fontWeight: '700', color: currentRisk > 60 ? '#f87171' : '#4ade80' }}>{summary?.riskScore?.trend || '—'}</div>
             </div>
           </div>
         </div>
@@ -291,32 +363,17 @@ export default function ExecutiveDashboard() {
           <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9', marginBottom: '4px' }}>Security Posture Score</div>
           <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '20px' }}>ISPM — Identity Security Posture</div>
           <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-            <svg width="120" height="120" viewBox="0 0 120 120" style={{ display: 'block', margin: '0 auto' }}>
-              <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="10" />
-              <circle cx="60" cy="60" r="50" fill="none" stroke="url(#postureGrad)" strokeWidth="10"
-                strokeDasharray={`${0.71 * 314} 314`}
-                strokeDashoffset="78.5" strokeLinecap="round"
-                style={{ filter: 'drop-shadow(0 0 8px rgba(234,179,8,0.5))' }} />
-              <defs>
-                <linearGradient id="postureGrad" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#6366f1" />
-                  <stop offset="100%" stopColor="#eab308" />
-                </linearGradient>
-              </defs>
-              <text x="60" y="55" textAnchor="middle" fill="#f1f5f9" fontSize="26" fontWeight="800">71</text>
-              <text x="60" y="72" textAnchor="middle" fill="#94a3b8" fontSize="11">/100</text>
-            </svg>
-            <div style={{ fontSize: '12px', color: '#eab308', fontWeight: '600', marginTop: '6px' }}>Needs Improvement</div>
+            <PostureGauge score={postureOverall} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {POSTURE_ITEMS.map(item => (
+            {postureItems.map(item => (
               <div key={item.label}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <span style={{ fontSize: '12px', color: '#94a3b8' }}>{item.label}</span>
-                  <span style={{ fontSize: '12px', fontWeight: '700', color: item.color }}>{item.score}%</span>
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: item.color }}>{item.score > 0 ? `${item.score}%` : '—'}</span>
                 </div>
                 <div style={{ height: '4px', background: 'rgba(255,255,255,0.06)', borderRadius: '2px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${item.score}%`, background: item.color, borderRadius: '2px', boxShadow: `0 0 6px ${item.color}60` }}></div>
+                  <div style={{ height: '100%', width: `${item.score}%`, background: item.color, borderRadius: '2px' }}></div>
                 </div>
               </div>
             ))}
@@ -326,18 +383,26 @@ export default function ExecutiveDashboard() {
 
       {/* Bottom row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-        {/* Critical Alerts */}
+        {/* Alerts */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9' }}>Active Security Alerts</div>
-            <button className="btn btn-ghost" style={{ fontSize: '11px', padding: '4px 10px' }}>View All →</button>
+            <a href="/itdr" style={{ fontSize: '11px', padding: '4px 10px', color: '#0D9488', textDecoration: 'none' }}>View All →</a>
           </div>
           <div style={{ padding: '12px' }}>
-            {CRITICAL_ALERTS.map(alert => {
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#475569', fontSize: '13px' }}>Loading threats…</div>
+            ) : alerts.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px' }}>
+                <div style={{ fontSize: '24px', marginBottom: '8px' }}>🛡️</div>
+                <div style={{ fontSize: '13px', color: '#4ade80', fontWeight: '600' }}>No active threats</div>
+                <div style={{ fontSize: '12px', color: '#475569', marginTop: '4px' }}>Security posture is clean</div>
+              </div>
+            ) : alerts.map(alert => {
               const s = severityStyle(alert.severity);
               return (
                 <div key={alert.id} style={{ display: 'flex', gap: '12px', padding: '12px', borderRadius: '8px', background: s.bg, border: `1px solid ${s.border}`, marginBottom: '8px' }}>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: s.dot, boxShadow: `0 0 8px ${s.dot}`, flexShrink: 0, marginTop: '5px' }}></div>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: s.dot, flexShrink: 0, marginTop: '5px' }}></div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
                       <span style={{ fontSize: '12px', fontWeight: '700', color: s.label }}>{alert.type}</span>
@@ -351,17 +416,28 @@ export default function ExecutiveDashboard() {
           </div>
         </div>
 
-        {/* Risk Heatmap */}
+        {/* Quick actions / setup guide */}
         <div className="card">
-          <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9', marginBottom: '4px' }}>Identity Risk Heatmap</div>
-          <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px' }}>Risk findings by category</div>
-          <RiskHeatmap />
-          <div style={{ display: 'flex', gap: '16px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-            {[['#ef4444', 'Critical (>70%)'], ['#f97316', 'High (40-70%)'], ['#eab308', 'Medium (20-40%)'], ['#22c55e', 'Low (<20%)']].map(([c, l]) => (
-              <div key={l} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: c as string }}></div>
-                <span style={{ fontSize: '10px', color: '#64748b' }}>{l}</span>
-              </div>
+          <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9', marginBottom: '4px' }}>Quick Actions</div>
+          <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px' }}>Platform setup & navigation</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {[
+              { label: '⟳ Run Discovery Scan',    href: null,              action: handleScan,      color: '#0D9488' },
+              { label: '◉ View Identities',        href: '/identities',     action: null,            color: '#6366f1' },
+              { label: '◈ Application Discovery',  href: '/applications',   action: null,            color: '#f97316' },
+              { label: '⬡ ITDR Threat Monitor',    href: '/itdr',           action: null,            color: '#ef4444' },
+              { label: '◈ Identity Graph',         href: '/graph',          action: null,            color: '#14B8A6' },
+              { label: '◉ Settings & Connectors',  href: '/settings',       action: null,            color: '#64748b' },
+            ].map((item, i) => (
+              item.href
+                ? <a key={i} href={item.href} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', textDecoration: 'none', color: item.color, fontSize: '13px', fontWeight: '600' }}>
+                    {item.label}
+                    <span style={{ marginLeft: 'auto', color: '#334155' }}>→</span>
+                  </a>
+                : <button key={i} onClick={item.action!} disabled={scanning} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', background: 'rgba(13,148,136,0.1)', border: '1px solid rgba(13,148,136,0.25)', borderRadius: '8px', color: item.color, fontSize: '13px', fontWeight: '600', cursor: 'pointer', width: '100%' }}>
+                    {item.label}
+                    {scanning && <span style={{ marginLeft: 'auto', color: '#334155' }}>⟳</span>}
+                  </button>
             ))}
           </div>
         </div>

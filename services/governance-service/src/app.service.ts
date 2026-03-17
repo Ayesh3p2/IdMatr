@@ -7,52 +7,48 @@ export class AppService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async getAllWorkflows() {
+  async getAllWorkflows(tenantId: string) {
     return this.prisma.approvalWorkflow.findMany({
-      include: {
-        history: true,
-      },
+      where: { tenantId },
+      include: { history: true },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async createWorkflow(data: any) {
+  async createWorkflow(tenantId: string, data: any) {
     return this.prisma.approvalWorkflow.create({
       data: {
+        tenantId,
         requestType: data.requestType,
         requesterId: data.requesterId,
         targetId: data.targetId,
         status: 'pending',
         currentApproverId: data.approverId,
-        slaDueDate: new Date(Date.now() + 86400000 * 3), // 3 days default
+        slaDueDate: new Date(Date.now() + 86400000 * 3),
       },
     });
   }
 
-  async updateWorkflow(id: string, action: string, approverId: string, comment?: string) {
-    const status = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'pending';
+  async updateWorkflow(tenantId: string, id: string, action: string, approverId: string, comment?: string) {
+    const existing = await this.prisma.approvalWorkflow.findFirst({ where: { id, tenantId } });
+    if (!existing) throw new Error(`Workflow ${id} not found for tenant ${tenantId}`);
 
+    const status = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'pending';
     return this.prisma.approvalWorkflow.update({
       where: { id },
       data: {
         status,
         history: {
-          create: {
-            approverId,
-            action,
-            comment,
-            timestamp: new Date(),
-          },
+          create: { approverId, action, comment, timestamp: new Date() },
         },
       },
     });
   }
 
-  async getJMLEvents() {
-    // Return JML (Joiner/Mover/Leaver) lifecycle events
-    // These could be stored in workflows with specific types
+  async getJMLEvents(tenantId: string) {
     const workflows = await this.prisma.approvalWorkflow.findMany({
       where: {
+        tenantId,
         requestType: { in: ['joiner', 'mover', 'leaver'] },
       },
       orderBy: { id: 'desc' },
@@ -65,18 +61,20 @@ export class AppService {
       userId: w.requesterId,
       targetId: w.targetId,
       status: w.status,
-      createdAt: w.id, // Using id as proxy for creation order
+      createdAt: w.createdAt,
       slaDueDate: w.slaDueDate,
     }));
   }
 
-  async createJMLEvent(data: any) {
+  async createJMLEvent(tenantId: string, data: any) {
     return this.prisma.approvalWorkflow.create({
       data: {
+        tenantId,
         requestType: data.type || 'joiner',
         requesterId: data.userId || 'system',
         targetId: data.targetId || data.userId,
         status: 'pending',
+        currentApproverId: data.approverId || 'system',
         slaDueDate: data.slaDueDate || new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
       },
     });

@@ -12,37 +12,37 @@ export class AppController {
   }
 
   @MessagePattern({ cmd: 'get_all_risk_scores' })
-  async getRiskScores() {
-    return this.appService.getRiskScores();
+  async getRiskScores(@Payload() data: { tenantId: string }) {
+    return this.appService.getRiskScores(data.tenantId);
   }
 
   @MessagePattern({ cmd: 'get_all_risk_events' })
-  async getRiskEvents() {
-    return this.appService.getRiskEvents();
+  async getRiskEvents(@Payload() data: { tenantId: string }) {
+    return this.appService.getRiskEvents(data.tenantId);
   }
 
   @MessagePattern({ cmd: 'get_itdr_threats' })
-  async getITDRThreats() {
-    return this.appService.getITDRThreats();
+  async getITDRThreats(@Payload() data: { tenantId: string }) {
+    return this.appService.getITDRThreats(data.tenantId);
   }
 
   @MessagePattern({ cmd: 'respond_to_threat' })
-  async respondToThreat(@Payload() data: { id: string; action: string; notes?: string }) {
-    return this.appService.respondToThreat(data.id, data.action, data.notes);
+  async respondToThreat(@Payload() data: { tenantId: string; id: string; action: string; notes?: string }) {
+    return this.appService.respondToThreat(data.tenantId, data.id, data.action, data.notes);
   }
 
   @MessagePattern({ cmd: 'get_risk_trends' })
-  async getRiskTrends() {
-    return this.appService.getRiskTrends();
+  async getRiskTrends(@Payload() data: { tenantId: string }) {
+    return this.appService.getRiskTrends(data.tenantId);
   }
 
   @MessagePattern({ cmd: 'calculate_risk' })
-  async calculateRisk(@Payload() data: { targetId: string; targetType: string }) {
-    return this.appService.calculateRisk(data.targetId, data.targetType);
+  async calculateRisk(@Payload() data: { tenantId: string; targetId: string; targetType: string }) {
+    return this.appService.calculateRisk(data.tenantId, data.targetId, data.targetType);
   }
 
   @MessagePattern({ cmd: 'detect_itdr_patterns' })
-  async detectITDRPatterns(@Payload() data: { userId: string }) {
-    return this.appService.detectITDRPatterns(data.userId);
+  async detectITDRPatterns(@Payload() data: { tenantId: string; userId: string }) {
+    return this.appService.detectITDRPatterns(data.tenantId, data.userId);
   }
 }

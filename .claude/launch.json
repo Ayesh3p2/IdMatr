@@ -65,6 +65,18 @@
       "name": "worker-queue",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "start:dev", "--workspace=services/worker-queue"],
+      "port": 3008
+    },
+    {
+      "name": "control-plane-ui",
+      "runtimeExecutable": "/Users/sudhir/.nvm/versions/node/v24.13.1/bin/node",
+      "runtimeArgs": [".claude/start-control-plane-ui.js"],
+      "port": 3002
+    },
+    {
+      "name": "control-plane",
+      "runtimeExecutable": "/Users/sudhir/.nvm/versions/node/v24.13.1/bin/node",
+      "runtimeArgs": [".claude/start-control-plane.js"],
       "port": 3010
     }
   ]

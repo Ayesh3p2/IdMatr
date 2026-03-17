@@ -1,0 +1,516 @@
+// IdMatr Control Plane — Prisma Schema
+// Manages multi-tenant lifecycle, configuration, and operator audit trail.
+
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../../node_modules/@prisma/control-plane-client"
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x", "linux-musl-arm64-openssl-1.1.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CONTROL_PLANE_DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OPERATORS — control plane users (platform administrators)
+// ─────────────────────────────────────────────────────────────────────────────
+model Operator {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("platform_operator")   // platform_operator
+  mfaEnabled   Boolean  @default(false)
+  mfaSecret    String?
+  lastLogin    DateTime?
+  isActive     Boolean  @default(true)
+
+  // Login security
+  failedLoginAttempts Int       @default(0)    // Track failed login attempts
+  lockedUntil         DateTime?                 // Account lockout timestamp
+  lastFailedLoginAt   DateTime?
+  loginAttemptWindow  DateTime  @default(now()) // Reset window for attempts
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  auditLogs         OperatorAuditLog[]
+  onboardingTokens  OnboardingToken[]  @relation("OnboardingIssuedBy")
+  accessReviewItems AccessReviewItem[]
+
+  @@index([email])
+  @@index([lockedUntil])
+  @@map("operators")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANTS — core tenant record
+// ─────────────────────────────────────────────────────────────────────────────
+model Tenant {
+  id             String       @id @default(uuid())
+  slug           String       @unique            // URL-safe name: acme-corp
+  name           String                          // Display name: Acme Corporation
+  domain         String?                         // Primary domain: acme.com
+  plan           String       @default("starter") // starter | pro | enterprise
+  status         TenantStatus @default(PENDING)
+  region         String       @default("us-east-1")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  trialEndsAt           DateTime?
+  suspendedAt           DateTime?
+  suspendReason         String?
+  onboardingCompletedAt DateTime?    // set when super-admin completes first password change
+
+  settings         TenantSettings?
+  integrations     TenantIntegration[]
+  apiKeys          TenantApiKey[]
+  healthMetrics    TenantHealthMetric[]
+  auditLogs        OperatorAuditLog[]
+  tenantUsers      TenantUser[]
+  onboardingTokens OnboardingToken[]
+  privacyNotices   PrivacyNotice[]
+  privacyNoticeAcceptances PrivacyNoticeAcceptance[]
+  consentRecords   ConsentRecord[]
+  dataSubjectRequests DataSubjectRequest[]
+  retentionTasks   RetentionTask[]
+
+  @@map("tenants")
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+  PENDING
+  OFFBOARDED
+  DELETED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANT USERS — per-tenant admin users provisioned during onboarding
+// ─────────────────────────────────────────────────────────────────────────────
+model TenantUser {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  email               String
+  name                String
+  passwordHash        String
+  role                String   @default("tenant_admin")  // tenant_admin | tenant_user | viewer
+  forcePasswordChange Boolean  @default(true)
+  isActive            Boolean  @default(true)
+  isAnonymized        Boolean  @default(false)
+  deletedAt           DateTime?
+  deletedReason       String?
+  lastLogin           DateTime?
+  mfaEnabled          Boolean  @default(false)
+  mfaSecret           String?
+  personalDataLegalBasis String @default("contract")
+  personalDataCategories String[] @default(["identity_profile", "authentication", "audit"])
+  privacyNoticeAcceptedAt DateTime?
+  privacyNoticeVersion String?
+
+  // Login security (matching Operator model)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  lastFailedLoginAt   DateTime?
+  loginAttemptWindow  DateTime  @default(now())
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  onboardingTokens    OnboardingToken[]
+  privacyNoticeAcceptances PrivacyNoticeAcceptance[]
+  consentRecords      ConsentRecord[]
+  dataSubjectRequests DataSubjectRequest[]
+
+  @@unique([tenantId, email])
+  @@index([email])
+  @@index([lockedUntil])
+  @@index([tenantId, deletedAt])
+  @@map("tenant_users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANT SETTINGS — per-tenant configuration
+// ─────────────────────────────────────────────────────────────────────────────
+model TenantSettings {
+  id                   String   @id @default(uuid())
+  tenantId             String   @unique
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Identity Provider
+  idpType              String?                       // google | azure | okta | saml | none
+  idpDomain            String?
+  idpClientId          String?
+  ssoEnforced          Boolean  @default(false)
+
+  // Risk Configuration
+  riskScoreThreshold   Int      @default(70)
+  riskAutoRemediation  Boolean  @default(false)
+  riskAlertEmails      String[] @default([])
+
+  // Discovery Settings
+  discoverySchedule    String   @default("0 2 * * *")  // cron
+  discoveryEnabled     Boolean  @default(true)
+
+  // Notification Settings
+  alertWebhookUrl      String?
+  slackWebhookUrl      String?
+  emailNotifications   Boolean  @default(true)
+
+  // Compliance
+  frameworks           String[] @default([])           // soc2 | iso27001 | nist | hipaa
+  dataResidency        String   @default("us")
+  dataRetentionDays    Int      @default(365)
+  deletionGraceDays    Int      @default(30)
+
+  // Feature Flags
+  itdrEnabled          Boolean  @default(true)
+  graphEnabled         Boolean  @default(true)
+  aiInsightsEnabled    Boolean  @default(false)
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("tenant_settings")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANT INTEGRATIONS — per-tenant connector credentials
+// ─────────────────────────────────────────────────────────────────────────────
+model TenantIntegration {
+  id           String              @id @default(uuid())
+  tenantId     String
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  provider     IntegrationProvider
+  status       IntegrationStatus   @default(PENDING)
+  enabled      Boolean             @default(false)
+
+  // Encrypted credential blob (AES-256 at rest)
+  configJson   String?             // JSON string of provider-specific config
+  lastSyncAt   DateTime?
+  lastSyncStatus String?           // success | error | partial
+  lastError    String?
+  syncCount    Int                 @default(0)
+  errorCount   Int                 @default(0)
+
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([tenantId, provider])
+  @@map("tenant_integrations")
+}
+
+enum IntegrationProvider {
+  GOOGLE_WORKSPACE
+  MICROSOFT_365
+  SLACK
+  GITHUB
+  OKTA
+  AZURE_AD
+  AWS_IAM
+  GITHUB_ENTERPRISE
+}
+
+enum IntegrationStatus {
+  PENDING
+  ACTIVE
+  ERROR
+  DISABLED
+  RATE_LIMITED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANT API KEYS — scoped access tokens for tenant services
+// ─────────────────────────────────────────────────────────────────────────────
+model TenantApiKey {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name        String                              // Human label: "Agent Key #1"
+  keyPrefix   String                              // First 8 chars for display: "idm_a1b2"
+  keyHash     String                              // SHA-256 of full key
+  scopes      String[]  @default([])              // read:identities | write:discovery | admin
+  isActive    Boolean   @default(true)
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@map("tenant_api_keys")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANT HEALTH METRICS — time-series operational snapshots
+// ─────────────────────────────────────────────────────────────────────────────
+model TenantHealthMetric {
+  id                String   @id @default(uuid())
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  recordedAt        DateTime @default(now())
+  userCount         Int      @default(0)
+  appCount          Int      @default(0)
+  riskEventCount    Int      @default(0)
+  auditLogCount     Int      @default(0)
+  apiCallCount      Int      @default(0)
+  discoveryJobCount Int      @default(0)
+  errorCount        Int      @default(0)
+  avgRiskScore      Float    @default(0)
+  status            String   @default("healthy")  // healthy | degraded | critical | unknown
+
+  @@index([tenantId, recordedAt(sort: Desc)])
+  @@map("tenant_health_metrics")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OPERATOR AUDIT LOG — every control plane action is recorded
+// ─────────────────────────────────────────────────────────────────────────────
+model OperatorAuditLog {
+  id          String   @id @default(uuid())
+  operatorId  String?
+  operator    Operator? @relation(fields: [operatorId], references: [id])
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id])
+
+  action      String                              // tenant.created | tenant.suspended | integration.enabled
+  category    String                              // tenant | integration | api-key | system | auth
+  severity    String   @default("info")           // info | warning | critical
+  description String
+  metadata    String?                             // JSON
+  ipAddress   String?
+  userAgent   String?
+  previousHash String?
+  entryHash    String?
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([operatorId, createdAt(sort: Desc)])
+  @@map("operator_audit_logs")
+}
+
+model PrivacyNotice {
+  id          String   @id @default(uuid())
+  tenantId     String?
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  version     String
+  title       String
+  content     String
+  isActive    Boolean  @default(true)
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  acceptances PrivacyNoticeAcceptance[]
+
+  @@index([tenantId, isActive, publishedAt(sort: Desc)])
+  @@unique([tenantId, version])
+  @@map("privacy_notices")
+}
+
+model PrivacyNoticeAcceptance {
+  id             String       @id @default(uuid())
+  tenantId       String
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantUserId   String
+  tenantUser     TenantUser   @relation(fields: [tenantUserId], references: [id], onDelete: Cascade)
+  privacyNoticeId String
+  privacyNotice  PrivacyNotice @relation(fields: [privacyNoticeId], references: [id], onDelete: Cascade)
+  ipAddress      String?
+  userAgent      String?
+  acceptedAt     DateTime     @default(now())
+
+  @@unique([tenantUserId, privacyNoticeId])
+  @@index([tenantId, acceptedAt(sort: Desc)])
+  @@map("privacy_notice_acceptances")
+}
+
+model ConsentRecord {
+  id           String     @id @default(uuid())
+  tenantId     String
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantUserId String
+  tenantUser   TenantUser @relation(fields: [tenantUserId], references: [id], onDelete: Cascade)
+  purpose      String
+  lawfulBasis  String
+  status       String     @default("granted")
+  source       String     @default("self_service")
+  metadata     String?
+  ipAddress    String?
+  userAgent    String?
+  grantedAt    DateTime   @default(now())
+  revokedAt    DateTime?
+  createdAt    DateTime   @default(now())
+
+  @@index([tenantId, tenantUserId, purpose])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("consent_records")
+}
+
+model DataSubjectRequest {
+  id                 String      @id @default(uuid())
+  tenantId           String
+  tenant             Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantUserId       String?
+  tenantUser         TenantUser? @relation(fields: [tenantUserId], references: [id], onDelete: SetNull)
+  requestType        String
+  status             String      @default("open")
+  requestedByUserId  String?
+  requestedByOperatorId String?
+  requestPayload     String?
+  resultPayload      String?
+  completedAt        DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@index([tenantId, requestType, createdAt(sort: Desc)])
+  @@index([tenantUserId, createdAt(sort: Desc)])
+  @@map("data_subject_requests")
+}
+
+model RetentionTask {
+  id           String    @id @default(uuid())
+  tenantId     String?
+  tenant       Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  taskType     String
+  targetType   String
+  targetId     String
+  status       String    @default("queued")
+  payload      String?
+  notBefore    DateTime  @default(now())
+  processedAt  DateTime?
+  errorMessage String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status, notBefore])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("retention_tasks")
+}
+
+model AccessReview {
+  id                 String    @id @default(uuid())
+  startedByOperatorId String
+  reviewScope        String    @default("operators")
+  status             String    @default("open")
+  dueAt              DateTime?
+  completedAt        DateTime?
+  summaryJson        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  items              AccessReviewItem[]
+
+  @@index([status, createdAt(sort: Desc)])
+  @@map("access_reviews")
+}
+
+model AccessReviewItem {
+  id             String       @id @default(uuid())
+  accessReviewId String
+  accessReview   AccessReview @relation(fields: [accessReviewId], references: [id], onDelete: Cascade)
+  operatorId     String
+  operator       Operator     @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  currentRole    String
+  disposition    String       @default("pending")
+  notes          String?
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([accessReviewId, operatorId])
+  @@index([disposition, updatedAt(sort: Desc)])
+  @@map("access_review_items")
+}
+
+model BreakGlassAccess {
+  id                  String    @id @default(uuid())
+  operatorEmail       String
+  justification       String
+  requestedByOperatorId String?
+  tokenHash           String    @unique
+  expiresAt           DateTime
+  usedAt              DateTime?
+  revokedAt           DateTime?
+  createdAt           DateTime  @default(now())
+
+  @@index([operatorEmail, expiresAt])
+  @@map("break_glass_access")
+}
+
+model OnboardingToken {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  tenant             Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantUserId       String
+  tenantUser         TenantUser @relation(fields: [tenantUserId], references: [id], onDelete: Cascade)
+  tokenHash          String    @unique
+  purpose            String    @default("onboarding")
+  expiresAt          DateTime
+  usedAt             DateTime?
+  createdByOperatorId String?
+  createdByOperator  Operator? @relation("OnboardingIssuedBy", fields: [createdByOperatorId], references: [id])
+  createdAt          DateTime  @default(now())
+
+  @@index([tenantId, expiresAt])
+  @@index([tenantUserId, usedAt])
+  @@map("onboarding_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APPLICATION SETTINGS — platform-wide and per-tenant settings (stored as JSON)
+// ─────────────────────────────────────────────────────────────────────────────
+model AppSettings {
+  id              String   @id @default(uuid())
+  tenantContext   String   // "SYSTEM" for platform settings, or tenantId for tenant settings
+  category        String   // general | security | risk | notifications | discovery | integrations
+  settings        Json     // JSONB blob of category-specific settings
+  updatedBy       String?  // Operator/User who made the change
+  updatedAt       DateTime @default(now()) @updatedAt
+
+  @@unique([tenantContext, category])
+  @@index([tenantContext, updatedAt(sort: Desc)])
+  @@map("app_settings")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS AUDIT LOG — track all settings changes
+// ─────────────────────────────────────────────────────────────────────────────
+model SettingsAuditLog {
+  id            String   @id @default(uuid())
+  tenantContext String   // "SYSTEM" or tenantId
+  category      String   // which settings category was changed
+  changedBy     String?  // operator/user who made change
+  oldValue      Json?    // JSONB of previous settings
+  newValue      Json     // JSONB of new settings
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+
+  @@index([tenantContext, createdAt(sort: Desc)])
+  @@index([category, createdAt(sort: Desc)])
+  @@map("settings_audit_log")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTEXT API KEYS — scoped API keys for services/tenants
+// ─────────────────────────────────────────────────────────────────────────────
+model ContextApiKey {
+  id         String    @id @default(uuid())
+  context    String    // "SYSTEM" for platform, or tenantId for tenant
+  name       String    // Human label: "Discovery Service Key"
+  keyPrefix  String    // First 12 chars for display: "idm_a1b2c3d4"
+  keyHash    String    // SHA-256 of full key (never store plaintext)
+  scopes     String[]  @default([]) // read:identities | write:discovery | admin:*
+  isActive   Boolean   @default(true)
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@unique([context, keyPrefix])
+  @@index([context, isActive])
+  @@map("context_api_keys")
+}

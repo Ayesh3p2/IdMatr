@@ -1,9 +1,23 @@
 **/.next
-**/dist
+# Exclude built output in app/service dirs but NOT node_modules/*/dist (e.g. @prisma/engines/dist)
+apps/*/dist
+services/*/dist
+packages/*/dist
 **/*.log
 .git
 .env
 .env.local
+# Exclude all node_modules — Dockerfiles run npm ci internally
+node_modules
 apps/*/node_modules
 services/*/node_modules
 packages/*/node_modules
+# Go discovery agent — not part of Docker stack
+agent/
+# Docs — not needed in images
+docs/
+# IDE / OS noise
+.DS_Store
+**/.DS_Store
+*.swp
+*.swo

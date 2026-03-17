@@ -1,0 +1,33 @@
+[Unit]
+Description=IDMatr Identity Agent
+Documentation=https://docs.idmart.io/agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/opt/idmart/idmart-agent -config /etc/idmart/agent.yaml
+Restart=on-failure
+RestartSec=10s
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+
+# Security hardening
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/var/log/idmart /var/lib/idmart /etc/idmart
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=idmart-agent
+
+[Install]
+WantedBy=multi-user.target

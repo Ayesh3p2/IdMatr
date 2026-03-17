@@ -12,17 +12,17 @@ export class AppController {
   }
 
   @MessagePattern({ cmd: 'check_policy' })
-  async checkPolicy(@Payload() data: { userId: string; resource: string; action: string }) {
+  async checkPolicy(@Payload() data: { tenantId: string; userId: string; resource: string; action: string }) {
     return this.appService.checkPolicy(data);
   }
 
   @MessagePattern({ cmd: 'get_policies' })
-  async getPolicies() {
-    return this.appService.getPolicies();
+  async getPolicies(@Payload() data: { tenantId: string }) {
+    return this.appService.getPolicies(data.tenantId);
   }
 
   @MessagePattern({ cmd: 'get_policy_violations' })
-  async getPolicyViolations() {
-    return this.appService.getPolicyViolations();
+  async getPolicyViolations(@Payload() data: { tenantId: string }) {
+    return this.appService.getPolicyViolations(data.tenantId);
   }
 }

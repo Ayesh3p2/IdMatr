@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
 }
 
 datasource db {
@@ -9,6 +10,7 @@ datasource db {
 
 model ApprovalWorkflow {
   id               String   @id @default(uuid())
+  tenantId         String
   requestType      String   // access_request, role_change, certification
   requesterId      String
   targetId         String
@@ -18,6 +20,8 @@ model ApprovalWorkflow {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   history          WorkflowHistory[]
+
+  @@index([tenantId])
 }
 
 model WorkflowHistory {
@@ -32,6 +36,7 @@ model WorkflowHistory {
 
 model CertificationCampaign {
   id            String   @id @default(uuid())
+  tenantId      String
   name          String
   description   String?
   startDate     DateTime
@@ -39,4 +44,6 @@ model CertificationCampaign {
   status        String   // active, completed, cancelled
   reviewers     String[] // list of user ids
   targetApps    String[] // list of app ids
+
+  @@index([tenantId])
 }

@@ -1,0 +1,13 @@
+Package: idmart-agent
+Version: 1.0.0
+Section: admin
+Priority: optional
+Architecture: amd64
+Maintainer: IDMatr <support@idmart.io>
+Homepage: https://idmart.io
+Description: IDMatr cross-platform identity and SaaS discovery agent
+ The IDMatr Agent discovers installed applications, running processes,
+ SaaS service usage, user privileges, and device security posture.
+ Telemetry is forwarded to the IDMatr Identity Security Platform for
+ analysis and risk scoring.
+Depends: systemd

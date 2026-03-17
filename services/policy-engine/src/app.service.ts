@@ -7,19 +7,19 @@ export class AppService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async checkPolicy(data: { userId: string; resource: string; action: string }) {
-    this.logger.log(`Checking policy for user ${data.userId} on ${data.resource}:${data.action}`);
-    
-    // Real RBAC lookup using Prisma
-    // We check if the user has an AccessGrant that links to a Role 
-    // that contains the required action on the given resource.
+  async checkPolicy(data: { tenantId: string; userId: string; resource: string; action: string }) {
+    this.logger.log(`Checking policy for tenant ${data.tenantId} user ${data.userId} on ${data.resource}:${data.action}`);
+
     const grants = await this.prisma.accessGrant.findMany({
       where: {
+        tenantId: data.tenantId,
         userId: data.userId,
         status: 'active',
         role: {
+          tenantId: data.tenantId,
           permissions: {
             some: {
+              tenantId: data.tenantId,
               action: data.action,
               resource: data.resource,
             },
@@ -29,7 +29,9 @@ export class AppService {
       include: {
         role: {
           include: {
-            permissions: true,
+            permissions: {
+              where: { tenantId: data.tenantId },
+            },
           },
         },
       },
@@ -38,34 +40,61 @@ export class AppService {
     if (grants.length > 0) {
       return { allowed: true, grantId: grants[0].id };
     }
-    
+
     return { allowed: false, reason: 'Insufficient privileges' };
   }
 
-  async getPolicies() {
-    // In a real system, these would also come from DB
+  async getPolicies(tenantId: string) {
     return [
-      { id: '1', name: 'Global Read Access', description: 'Allows all users to read public resources', effect: 'allow', actions: ['read'], resources: ['*'] },
-      { id: '2', name: 'Admin Write Access', description: 'Allows admins to write to all resources', effect: 'allow', actions: ['write', 'delete'], resources: ['*'], conditions: { role: 'admin' } },
+      {
+        id: `${tenantId}-read`,
+        tenantId,
+        name: 'Tenant Read Access',
+        description: 'Allows authenticated tenant users to read tenant-scoped resources',
+        effect: 'allow',
+        actions: ['read'],
+        resources: ['tenant:*'],
+      },
+      {
+        id: `${tenantId}-admin`,
+        tenantId,
+        name: 'Tenant Admin Write Access',
+        description: 'Allows tenant administrators to write tenant-scoped resources',
+        effect: 'allow',
+        actions: ['write', 'delete'],
+        resources: ['tenant:*'],
+        conditions: { role: 'tenant_admin' },
+      },
     ];
   }
 
-  async getPolicyViolations() {
-    // Query for policy violations based on permissions that exceed policy constraints
+  async getPolicyViolations(tenantId: string) {
     const permissions = await this.prisma.permission.findMany({
-      where: { riskLevel: { in: ['high', 'critical'] } },
-      include: { role: { include: { accessGrants: { where: { status: 'active' } } } } },
+      where: {
+        tenantId,
+        riskLevel: { in: ['high', 'critical'] },
+      },
+      include: {
+        role: {
+          include: {
+            accessGrants: {
+              where: { tenantId, status: 'active' },
+            },
+          },
+        },
+      },
     });
 
     return permissions
-      .filter(p => p.role && p.role.accessGrants.length > 0)
-      .map(p => ({
-        id: `PV-${p.id.slice(0, 6)}`,
-        permissionId: p.id,
-        permissionName: p.name,
-        riskLevel: p.riskLevel,
-        affectedUsers: p.role?.accessGrants.length || 0,
-        policy: `${p.name} Restriction Policy`,
+      .filter((permission) => permission.role && permission.role.accessGrants.length > 0)
+      .map((permission) => ({
+        id: `PV-${permission.id.slice(0, 6)}`,
+        tenantId,
+        permissionId: permission.id,
+        permissionName: permission.name,
+        riskLevel: permission.riskLevel,
+        affectedUsers: permission.role?.accessGrants.length || 0,
+        policy: `${permission.name} Restriction Policy`,
         status: 'Open',
       }));
   }

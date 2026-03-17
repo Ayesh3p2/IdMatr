@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
 }
 
 datasource db {
@@ -9,7 +10,8 @@ datasource db {
 
 model DiscoveredApp {
   id              String   @id @default(uuid())
-  name            String   @unique
+  tenantId        String
+  name            String
   source          String   // google, microsoft, slack, etc.
   rawTelemetry    Json?
   firstDetected   DateTime @default(now())
@@ -17,10 +19,14 @@ model DiscoveredApp {
   status          String   // identified, unknown, shadow-it
   metadata        Json?
   users           DiscoveredUser[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
 }
 
 model DiscoveredUser {
   id              String   @id @default(uuid())
+  tenantId        String
   email           String
   externalId      String?  // ID in the source system
   appId           String
@@ -29,13 +35,18 @@ model DiscoveredUser {
   isAdmin         Boolean  @default(false)
   lastActivity    DateTime?
   status          String   // active, inactive
+
+  @@index([tenantId])
 }
 
 model DiscoveryConnector {
   id              String   @id @default(uuid())
+  tenantId        String
   type            String   // google, microsoft, slack, etc.
   config          Json?    // encrypted API keys, etc.
   status          String   // active, disabled, error
   lastScan        DateTime?
   nextScan        DateTime?
+
+  @@index([tenantId])
 }

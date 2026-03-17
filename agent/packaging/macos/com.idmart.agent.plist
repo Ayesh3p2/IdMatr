@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.idmart.agent</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Library/IDMatr/idmart-agent</string>
+        <string>-config</string>
+        <string>/Library/IDMatr/agent.yaml</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Library/Logs/IDMatr/agent.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Library/Logs/IDMatr/agent.stderr.log</string>
+
+    <key>WorkingDirectory</key>
+    <string>/Library/IDMatr</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin</string>
+    </dict>
+
+    <!-- Restart immediately if the agent exits unexpectedly -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+</dict>
+</plist>

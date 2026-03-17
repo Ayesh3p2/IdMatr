@@ -5,14 +5,23 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
+  if (!process.env.NATS_URL || !process.env.NATS_USER || !process.env.NATS_PASSWORD) {
+    throw new Error('NATS_URL, NATS_USER, and NATS_PASSWORD env vars are required');
+  }
   const app = await NestFactory.create(AppModule);
   
-  app.useGlobalPipes(new ValidationPipe({ transform: true }));
+  app.useGlobalPipes(new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+  }));
   
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.NATS,
     options: {
-      servers: [process.env.NATS_URL || 'nats://localhost:4222'],
+      servers: [process.env.NATS_URL],
+      user: process.env.NATS_USER,
+      pass: process.env.NATS_PASSWORD,
     },
   });
   
