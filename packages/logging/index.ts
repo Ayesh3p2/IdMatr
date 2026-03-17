@@ -122,3 +122,89 @@ export const createAuditLogger = (service: string): winston.Logger => {
 };
 
 export { WinstonModule, nestWinstonModuleUtilities, winston };
+
+const SENSITIVE_FIELDS = [
+  'password',
+  'passwordHash',
+  'secret',
+  'apiKey',
+  'api_key',
+  'apikey',
+  'accessToken',
+  'access_token',
+  'refreshToken',
+  'refresh_token',
+  'token',
+  'jwt',
+  'authorization',
+  'Authorization',
+  'credentials',
+  'privateKey',
+  'private_key',
+  'publicKey',
+  'public_key',
+  'certificate',
+  'cert',
+  'key',
+  'clientSecret',
+  'client_secret',
+  'sessionId',
+  'session_id',
+  'ssn',
+  'socialSecurity',
+  'creditCard',
+  'credit_card',
+];
+
+const SENSITIVE_PATTERNS = [
+  /bearer\s+[a-zA-Z0-9\-_.~+/]+=*/gi,
+  /eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*/gi,
+  /\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}/g,
+  /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+];
+
+export const sanitizeLogObject = (obj: Record<string, unknown>): Record<string, unknown> => {
+  if (!obj || typeof obj !== 'object') {
+    return obj;
+  }
+
+  const sanitized: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(obj)) {
+    const lowerKey = key.toLowerCase();
+
+    if (SENSITIVE_FIELDS.some(field => lowerKey.includes(field.toLowerCase()))) {
+      sanitized[key] = '[REDACTED]';
+    } else if (typeof value === 'object' && value !== null) {
+      sanitized[key] = sanitizeLogObject(value as Record<string, unknown>);
+    } else if (typeof value === 'string') {
+      sanitized[key] = sanitizeString(value);
+    } else {
+      sanitized[key] = value;
+    }
+  }
+
+  return sanitized;
+};
+
+const sanitizeString = (value: string): string => {
+  let sanitized = value;
+
+  for (const pattern of SENSITIVE_PATTERNS) {
+    sanitized = sanitized.replace(pattern, '[REDACTED]');
+  }
+
+  return sanitized;
+};
+
+export const sanitizeForLogging = (...args: unknown[]): unknown[] => {
+  return args.map(arg => {
+    if (typeof arg === 'object' && arg !== null) {
+      return sanitizeLogObject(arg as Record<string, unknown>);
+    }
+    if (typeof arg === 'string') {
+      return sanitizeString(arg);
+    }
+    return arg;
+  });
+};
