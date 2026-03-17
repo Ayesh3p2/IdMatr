@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json.schemastore.org/eslintrc",
+  "root": true,
+  "ignorePatterns": ["**/dist/**", "**/node_modules/**", "**/.next/**", "**/coverage/**"],
+  "plugins": ["@typescript-eslint", "prettier", "import"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:@typescript-eslint/recommended-requiring-type-checking",
+    "plugin:import/recommended",
+    "plugin:import/typescript",
+    "prettier"
+  ],
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module",
+    "project": ["./tsconfig.json", "./apps/*/tsconfig.json", "./services/*/tsconfig.json", "./packages/*/tsconfig.json"],
+    "ecmaFeatures": {
+      "jsx": true
+    }
+  },
+  "settings": {
+    "import/resolver": {
+      "typescript": {
+        "alwaysTryTypes": true,
+        "project": ["./tsconfig.json", "./apps/*/tsconfig.json", "./services/*/tsconfig.json"]
+      }
+    }
+  },
+  "rules": {
+    "prettier/prettier": ["error", {
+      "semi": true,
+      "singleQuote": true,
+      "tabWidth": 2,
+      "trailingComma": "es5",
+      "printWidth": 100,
+      "bracketSpacing": true,
+      "arrowParens": "always"
+    }],
+    "@typescript-eslint/explicit-function-return-type": "off",
+    "@typescript-eslint/explicit-module-boundary-types": "off",
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "@typescript-eslint/no-floating-promises": "error",
+    "@typescript-eslint/prefer-nullish-coalescing": "warn",
+    "@typescript-eslint/no-non-null-assertion": "off",
+    "import/order": ["error", {
+      "groups": [["builtin", "external"], "internal", ["parent", "sibling", "index"]],
+      "alphabetize": { "order": "asc", "caseInsensitive": true },
+      "newlines-between": "always"
+    }],
+    "import/no-unresolved": "error",
+    "no-console": ["warn", { "allow": ["warn", "error"] }],
+    "no-debugger": "error",
+    "no-var": "error",
+    "prefer-const": "error"
+  },
+  "overrides": [
+    {
+      "files": ["*.ts", "*.tsx"],
+      "excludedFiles": ["*.spec.ts", "*.e2e-spec.ts"]
+    },
+    {
+      "files": ["*.spec.ts", "*.e2e-spec.ts", "test/**/*.ts"],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/no-unused-vars": "off"
+      }
+    },
+    {
+      "files": ["*.js", "*.jsx"],
+      "parserOptions": {
+        "project": null
+      }
+    }
+  ]
+}

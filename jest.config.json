@@ -1,0 +1,30 @@
+{
+  "preset": "jest-preset-angular",
+  "setupFilesAfterEnv": ["<rootDir>/jest.setup.ts"],
+  "testPathIgnorePatterns": ["<rootDir>/node_modules/", "<rootDir>/dist/", "<rootDir>/.next/"],
+  "coverageDirectory": "<rootDir>/coverage",
+  "collectCoverageFrom": [
+    "**/*.(service|controller|module|guard|interceptor|decorator).ts",
+    "!**/*.(spec|test|e2e-spec).ts",
+    "!**/node_modules/**",
+    "!**/dist/**",
+    "!**/.next/**"
+  ],
+  "moduleNameMapper": {
+    "^@idmatr/(.*)$": "<rootDir>/packages/$1/src",
+    "^@app/(.*)$": "<rootDir>/apps/$1/src",
+    "^@services/(.*)$": "<rootDir>/services/$1/src"
+  },
+  "transform": {
+    "^.+\\.(ts|tsx)$": ["ts-jest", {
+      "tsconfig": "tsconfig.json",
+      "isolatedModules": true
+    }]
+  },
+  "testEnvironment": "node",
+  "globals": {
+    "ts-jest": {
+      "tsconfig": "tsconfig.json"
+    }
+  }
+}

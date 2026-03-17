@@ -13,32 +13,64 @@
     "start": "npm run start --workspaces --if-present",
     "dev": "npm run dev --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
+    "test:cov": "npm run test --workspaces --if-present -- --coverage",
+    "lint": "eslint \"{apps,services,packages}/**/*.{ts,tsx}\" --max-warnings 0",
+    "lint:fix": "eslint \"{apps,services,packages}/**/*.{ts,tsx}\" --fix",
+    "format": "prettier --write \"{apps,services,packages}/**/*.{ts,tsx,js,json,md,yml}\"",
+    "format:check": "prettier --check \"{apps,services,packages}/**/*.{ts,tsx,js,json,md,yml}\"",
     "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down"
+    "docker:down": "docker-compose down",
+    "docker:build": "docker-compose build --parallel",
+    "docker:logs": "docker-compose logs -f",
+    "typecheck": "tsc --noEmit --project apps/*/tsconfig.json services/*/tsconfig.json packages/*/tsconfig.json",
+    "prepare": "husky install",
+    "postinstall": "npm run build --workspaces --if-present"
   },
   "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
     "@nestjs/common": "^11.1.16",
     "@nestjs/core": "^11.1.16",
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/microservices": "^11.1.16",
     "@nestjs/passport": "^11.0.5",
+    "@nestjs/platform-express": "^11.1.16",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.1.16",
     "@prisma/client": "^5.22.0",
+    "@types/eslint": "^8.56.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/lodash": "^4.17.24",
     "@types/node": "^25.3.5",
     "@types/passport-jwt": "^4.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "axios": "^1.13.6",
     "concurrently": "^8.2.2",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^10.0.0",
+    "eslint-import-resolver-typescript": "^3.6.0",
+    "eslint-plugin-import": "^2.29.0",
+    "eslint-plugin-prettier": "^5.2.0",
+    "husky": "^9.1.0",
     "jsonwebtoken": "^9.0.3",
     "lodash": "^4.17.23",
     "nats": "^2.29.3",
     "neo4j-driver": "^6.0.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "prettier": "^3.3.0",
     "prisma": "^5.22.0",
     "rimraf": "^5.0.10",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "npm run lint && npm run format:check"
+    }
   }
 }

@@ -1,0 +1,22 @@
+{
+  "name": "@idmatr/config",
+  "version": "1.0.0",
+  "description": "IDMatr configuration management",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Tests not configured\""
+  },
+  "dependencies": {
+    "joi": "^17.13.0",
+    "yaml": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.5.0"
+  },
+  "keywords": ["idmatr", "config", "environment"],
+  "author": "IDMatr Team",
+  "license": "MIT"
+}
