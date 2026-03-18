@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: idmatr
+  labels:
+    app.kubernetes.io/name: idmatr
+    app.kubernetes.io/part-of: idmatr
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: idmatr-infra
+  labels:
+    app.kubernetes.io/name: idmatr
+    type: infrastructure

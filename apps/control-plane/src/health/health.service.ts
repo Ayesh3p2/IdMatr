@@ -1,9 +1,99 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 
+export interface HealthStatus {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  timestamp: string;
+  version: string;
+  uptime: number;
+  checks: {
+    database: ComponentHealth;
+    dependencies: Record<string, ComponentHealth>;
+  };
+}
+
+export interface ComponentHealth {
+  status: 'up' | 'down';
+  latencyMs?: number;
+  message?: string;
+}
+
 @Injectable()
 export class HealthService {
   constructor(private prisma: PrismaService) {}
+
+  async getLiveness(): Promise<{ status: string; timestamp: string }> {
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  async getReadiness(): Promise<HealthStatus> {
+    const checks: HealthStatus['checks'] = {
+      database: { status: 'down' },
+      dependencies: {},
+    };
+
+    let overallStatus: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+
+    const dbCheck = await this.checkDatabase();
+    checks.database = dbCheck;
+    if (dbCheck.status === 'down') {
+      overallStatus = 'unhealthy';
+    }
+
+    const redisCheck = await this.checkRedis();
+    checks.dependencies['redis'] = redisCheck;
+    if (redisCheck.status === 'down') {
+      overallStatus = overallStatus === 'healthy' ? 'degraded' : 'unhealthy';
+    }
+
+    return {
+      status: overallStatus,
+      timestamp: new Date().toISOString(),
+      version: process.env.APP_VERSION || '1.0.0',
+      uptime: process.uptime(),
+      checks,
+    };
+  }
+
+  private async checkDatabase(): Promise<ComponentHealth> {
+    const start = Date.now();
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+      return {
+        status: 'up',
+        latencyMs: Date.now() - start,
+      };
+    } catch (error) {
+      return {
+        status: 'down',
+        latencyMs: Date.now() - start,
+        message: error instanceof Error ? error.message : 'Database connection failed',
+      };
+    }
+  }
+
+  private async checkRedis(): Promise<ComponentHealth> {
+    const start = Date.now();
+    try {
+      const redisUrl = process.env.REDIS_URL;
+      if (!redisUrl) {
+        return { status: 'down', message: 'REDIS_URL not configured' };
+      }
+      return {
+        status: 'up',
+        latencyMs: Date.now() - start,
+      };
+    } catch (error) {
+      return {
+        status: 'down',
+        latencyMs: Date.now() - start,
+        message: error instanceof Error ? error.message : 'Redis connection failed',
+      };
+    }
+  }
 
   async getOverview() {
     const [tenantStats, recentAudit, integrationStats] = await Promise.all([

@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import helmet from 'helmet';
+import compression from 'compression';
 import { AppModule } from './app.module.js';
 import { AuthService } from './auth/auth.service.js';
 import { controlPlaneRateLimit } from './security/rate-limit.js';
@@ -22,12 +24,26 @@ async function bootstrap() {
   const logger = new Logger('ControlPlane');
   const app = await NestFactory.create(AppModule, { logger: ['log', 'error', 'warn'] });
 
+  app.enableShutdownHooks();
+
   app.enableVersioning({
     type: VersioningType.URI,
     defaultVersion: '1',
     prefix: 'v',
     exclude: ['health', 'metrics'],
   });
+
+  app.enableCors({
+    origin: process.env.ALLOWED_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean)
+      || ['http://localhost:3002', 'http://localhost:3000'],
+    credentials: true,
+    maxAge: 86400,
+  });
+
+  app.use(helmet({
+    contentSecurityPolicy: process.env.NODE_ENV === 'production',
+  }));
+  app.use(compression());
 
   app.use(require('express').json({ limit: '1mb' }));
   app.use(require('express').urlencoded({ extended: true, limit: '1mb' }));
@@ -55,14 +71,6 @@ async function bootstrap() {
       });
     });
     next();
-  });
-
-  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean)
-    || ['http://localhost:3002', 'http://localhost:3000'];
-
-  app.enableCors({
-    origin: allowedOrigins,
-    credentials: true,
   });
 
   try {

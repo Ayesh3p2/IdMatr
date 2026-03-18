@@ -1,0 +1,14 @@
+apiVersion: v2
+name: idmatr
+description: IDMatr - Enterprise Identity Security Platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - identity
+  - security
+  - iam
+  - compliance
+maintainers:
+  - name: IDMatr Team
+    email: support@idmatr.io
