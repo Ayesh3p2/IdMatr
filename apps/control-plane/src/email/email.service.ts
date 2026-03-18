@@ -128,8 +128,9 @@ If you did not request this account, contact your platform administrator immedia
       });
       this.logger.log(`Welcome onboarding email sent to ${data.adminEmail}`);
       return true;
-    } catch (error: any) {
-      this.logger.error(`Failed to send welcome email to ${data.adminEmail}: ${error.message}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to send welcome email to ${data.adminEmail}: ${message}`);
       return false;
     }
   }
@@ -165,8 +166,9 @@ This link expires in 15 minutes and can only be used once.
       });
       this.logger.log(`Regenerated onboarding email sent to ${data.adminEmail}`);
       return true;
-    } catch (error: any) {
-      this.logger.error(`Failed to send regenerated onboarding email to ${data.adminEmail}: ${error.message}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to send regenerated onboarding email to ${data.adminEmail}: ${message}`);
       return false;
     }
   }

@@ -1,0 +1,6 @@
+module.exports = {
+  preset: null,
+  testEnvironment: 'node',
+  testMatch: ['**/simple.spec.ts'],
+  rootDir: process.cwd(),
+};

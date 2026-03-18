@@ -568,13 +568,14 @@ export class PrivacyService {
         });
 
         processed += 1;
-      } catch (error: any) {
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
         await this.prisma.retentionTask.update({
           where: { id: task.id },
-          data: { status: 'error', errorMessage: error.message },
+          data: { status: 'error', errorMessage: message },
         }).catch(() => undefined);
 
-        this.logger.error(`Retention task ${task.id} failed: ${error.message}`);
+        this.logger.error(`Retention task ${task.id} failed: ${message}`);
       }
     }
 
@@ -602,8 +603,9 @@ export class PrivacyService {
         if (result.queued || result.processed) {
           this.logger.log(`Retention scan queued=${result.queued} processed=${result.processed}`);
         }
-      } catch (error: any) {
-        this.logger.error(`Retention scan failed: ${error.message}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(`Retention scan failed: ${message}`);
       }
     }, intervalMs).unref();
   }

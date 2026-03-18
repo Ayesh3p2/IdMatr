@@ -1,0 +1,8 @@
+{
+  "testEnvironment": "node",
+  "testMatch": ["**/apps/control-plane/simple.spec.js"],
+  "rootDir": ".",
+  "testTimeout": 30000,
+  "maxWorkers": 1,
+  "forceExit": true
+}

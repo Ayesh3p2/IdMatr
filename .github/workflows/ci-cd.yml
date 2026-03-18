@@ -36,13 +36,13 @@ jobs:
         run: npm ci
 
       - name: ESLint
-        run: npm run lint || true
+        run: npm run lint
 
       - name: Prettier Check
         run: npm run format:check
 
       - name: TypeScript Check
-        run: npm run typecheck || true
+        run: npm run typecheck
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Test Suite
@@ -63,7 +63,7 @@ jobs:
         run: npm ci
 
       - name: Unit Tests
-        run: npm run test --workspaces --if-present -- --passWithNoTests
+        run: npm run test --workspaces --if-present
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4

@@ -1,0 +1,20 @@
+{
+  "testEnvironment": "node",
+  "testMatch": ["**/apps/control-plane/src/**/*.spec.ts"],
+  "rootDir": ".",
+  "transform": {
+    "^.+\\.tsx?$": ["ts-jest", {
+      "tsconfig": {
+        "module": "commonjs",
+        "moduleResolution": "node"
+      }
+    }]
+  },
+  "moduleNameMapper": {
+    "^(\\.{1,2}/.*)\\.ts$": "$1"
+  },
+  "testTimeout": 30000,
+  "maxWorkers": 1,
+  "forceExit": true,
+  "runInBand": true
+}

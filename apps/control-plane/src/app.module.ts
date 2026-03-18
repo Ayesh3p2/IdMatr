@@ -9,12 +9,16 @@ import { EmailModule } from './email/email.module.js';
 import { SecurityModule } from './security/security.module.js';
 import { PrivacyModule } from './privacy/privacy.module.js';
 import { AccessReviewModule } from './access-review/access-review.module.js';
+import { MetricsModule } from './metrics/metrics.module.js';
+import { TracingModule } from './tracing/tracing.module.js';
 
 @Module({
   imports: [
+    TracingModule,
+    MetricsModule,
     PrismaModule,
     SecurityModule,
-    EmailModule,       // global — available in all modules
+    EmailModule,
     AuthModule,
     TenantsModule,
     AuditModule,

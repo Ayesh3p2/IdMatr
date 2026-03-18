@@ -141,8 +141,9 @@ export class TenantsService {
       await this.audit(operatorId, tenant.id, 'super_admin_created', 'tenant', 'info',
         `Super-admin "${dto.adminEmail}" provisioned for tenant "${tenant.name}"`,
         { adminEmail: dto.adminEmail });
-    } catch (err: any) {
-      this.logger.error(`Failed to provision tenant admin for ${tenant.slug}: ${err.message}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      this.logger.error(`Failed to provision tenant admin for ${tenant.slug}: ${message}`);
       // Non-fatal — tenant was created, admin provisioning failed
     }
 

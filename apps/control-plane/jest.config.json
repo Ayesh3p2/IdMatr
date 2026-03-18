@@ -1,0 +1,32 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "src",
+  "testRegex": ".*\\.spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": ["ts-jest", {
+      "useESM": false,
+      "tsconfig": {
+        "module": "commonjs",
+        "moduleResolution": "node",
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true
+      }
+    }]
+  },
+  "collectCoverageFrom": ["**/*.(service|controller|guard|decorator).ts"],
+  "coverageDirectory": "../coverage",
+  "testEnvironment": "node",
+  "testTimeout": 30000,
+  "maxWorkers": 1,
+  "forceExit": true,
+  "detectOpenHandles": false,
+  "clearMocks": true,
+  "resetMocks": true,
+  "restoreMocks": true,
+  "runInBand": true,
+  "moduleNameMapper": {
+    "^@idmatr/(.*)$": "<rootDir>/../../packages/$1/src",
+    "^(\\.{1,2}/.*)\\.js$": "$1",
+    "^(\\.{1,2}/.*)\\.ts$": "$1"
+  }
+}
