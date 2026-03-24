@@ -1,92 +1,115 @@
-import 'reflect-metadata';
-import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { json, urlencoded } from 'express';
+import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
-import compression from 'compression';
-import { AppModule } from './app.module.js';
-import { AuthService } from './auth/auth.service.js';
-import { controlPlaneRateLimit } from './security/rate-limit.js';
-import { MetricsService } from './metrics/metrics.service.js';
+import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const required = [
-    'CONTROL_PLANE_JWT_SECRET',
-    'INTERNAL_API_SECRET',
-    'DATA_ENCRYPTION_KEY',
-    'CONTROL_PLANE_DATABASE_URL',
-    'REDIS_URL',
-  ];
-  const missing = required.filter((name) => !process.env[name]);
-  if (missing.length) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
-  }
+  const app = await NestFactory.create(AppModule);
+  const requestSizeLimit = process.env.REQUEST_SIZE_LIMIT ?? '1mb';
+  const globalRateLimitWindowMs = Number(process.env.RATE_LIMIT_WINDOW_MS ?? 60_000);
+  const globalRateLimitMax = Number(process.env.RATE_LIMIT_MAX ?? 300);
+  const authRateLimitWindowMs = Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS ?? 900_000);
+  const authRateLimitMax = Number(process.env.AUTH_RATE_LIMIT_MAX ?? 10);
 
-  const logger = new Logger('ControlPlane');
-  const app = await NestFactory.create(AppModule, { logger: ['log', 'error', 'warn'] });
-
-  app.enableShutdownHooks();
-
-  app.enableVersioning({
-    type: VersioningType.URI,
-    defaultVersion: '1',
-    prefix: 'v',
-    exclude: ['health', 'metrics'],
-  });
-
+  app.setGlobalPrefix('api');
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'same-site' },
+      referrerPolicy: { policy: 'no-referrer' },
+    }),
+  );
+  app.use(json({ limit: requestSizeLimit }));
+  app.use(urlencoded({ extended: true, limit: requestSizeLimit }));
+  app.use(
+    rateLimit({
+      windowMs: globalRateLimitWindowMs,
+      limit: globalRateLimitMax,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      skip: (request) => request.path === '/api/health',
+    }),
+  );
+  app.use(
+    '/api/auth/login',
+    rateLimit({
+      windowMs: authRateLimitWindowMs,
+      limit: authRateLimitMax,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+    }),
+  );
+  app.use(
+    '/api/auth/refresh',
+    rateLimit({
+      windowMs: authRateLimitWindowMs,
+      limit: authRateLimitMax,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+    }),
+  );
   app.enableCors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean)
-      || ['http://localhost:3002', 'http://localhost:3000'],
+    origin: buildCorsOriginValidator(),
     credentials: true,
-    maxAge: 86400,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Authorization', 'Content-Type'],
+    maxAge: 86_400,
   });
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: true,
+      forbidUnknownValues: true,
+      stopAtFirstError: true,
+    }),
+  );
 
-  app.use(helmet({
-    contentSecurityPolicy: process.env.NODE_ENV === 'production',
-  }));
-  app.use(compression());
-
-  app.use(require('express').json({ limit: '1mb' }));
-  app.use(require('express').urlencoded({ extended: true, limit: '1mb' }));
-  app.use(controlPlaneRateLimit());
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  }));
-
-  const metrics = app.get(MetricsService);
-  app.use((req, res, next) => {
-    const start = Date.now();
-    res.on('finish', () => {
-      const duration = (Date.now() - start) / 1000;
-      const route = req.route?.path || req.path;
-      metrics.httpRequestDuration.observe(
-        { method: req.method, route, status_code: res.statusCode },
-        duration,
-      );
-      metrics.httpRequestTotal.inc({
-        method: req.method,
-        route,
-        status_code: res.statusCode,
-      });
-    });
-    next();
-  });
-
-  try {
-    const auth = app.get(AuthService);
-    await auth.seedSuperAdmin();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    logger.warn(`Could not seed platform operator: ${message}`);
-  }
-
-  const port = process.env.CONTROL_PLANE_PORT || 3010;
-  await app.listen(port);
-  logger.log(`IdMatr Control Plane running on port ${port}`);
-  logger.log(`API v1 available at /v1/*`);
-  logger.log(`Health check available at /health`);
-  logger.log(`Metrics available at /metrics`);
+  const port = Number(process.env.PORT ?? 3001);
+  await app.listen(port, '0.0.0.0');
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  console.error('Failed to start IDMatr backend', error);
+  process.exit(1);
+});
+
+function buildCorsOriginValidator() {
+  const configuredOrigins = process.env.CORS_ORIGIN?.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  const allowedOrigins = new Set(
+    configuredOrigins && configuredOrigins.length > 0
+      ? configuredOrigins
+      : process.env.NODE_ENV === 'production'
+        ? []
+        : [
+            'http://localhost:3000',
+            'http://localhost:3001',
+            'http://localhost:3010',
+            'http://127.0.0.1:3000',
+            'http://127.0.0.1:3001',
+            'http://127.0.0.1:3010',
+          ],
+  );
+
+  if (process.env.NODE_ENV === 'production' && allowedOrigins.size === 0) {
+    throw new Error('CORS_ORIGIN must be configured in production');
+  }
+
+  return (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedOrigins.has(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error('Origin not allowed by CORS'));
+  };
+}

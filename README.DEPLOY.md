@@ -1,5 +1,11 @@
 # IDMatr - Production Deployment Guide
 
+## Current Public URLs (ngrok tunnels active)
+
+- **Admin Dashboard**: https://ad50-2401-4900-c905-5360-206e-e126-b14c-e3b7.ngrok-free.app
+- **API Gateway**: https://4d34-2401-4900-c905-5360-206e-e126-b14c-e3b7.ngrok-free.app
+- **Control Plane UI**: https://53f3-2401-4900-c905-5360-206e-e126-b14c-e3b7.ngrok-free.app
+
 ## Quick Start
 
 ### Prerequisites

@@ -2,105 +2,97 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
-  Req,
+  Query,
   Res,
+  UnauthorizedException,
   UseGuards,
-  Version,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { Response } from 'express';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
-import { AuthService } from './auth.service.js';
-import {
-  CONTROL_PLANE_COOKIE_NAME,
-  buildClearedCookie,
-  buildSessionCookie,
-} from '../security/cookies.js';
-import { Roles } from '../security/roles.decorator.js';
-import { ControlPlaneRolesGuard } from '../security/roles.guard.js';
-import { PLATFORM_OPERATOR_ROLE } from '../security/roles.js';
+import { CurrentUser } from '../common/current-user.decorator';
+import { RequestUser } from '../common/request-user.interface';
+import { AcceptInviteDto } from '../invites/dto/accept-invite.dto';
+import { AllowWithoutMfa } from './allow-without-mfa.decorator';
+import { AuthService } from './auth.service';
+import { LoginDto } from './dto/login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { Public } from './public.decorator';
 
-class LoginDto {
-  @IsEmail()
-  email: string;
-
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(256)
-  password: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(12)
-  totpCode?: string;
-}
-
-class TotpDto {
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(12)
-  code: string;
-}
-
-@Controller('control/auth')
+@Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(private readonly authService: AuthService) {}
 
+  @Public()
+  @Get('google')
+  async googleLogin(@Query('tenantSlug') tenantSlug: string, @Res() res: Response) {
+    const { authorizationUrl } = await this.authService.getGoogleAuthorizationUrl(tenantSlug);
+    return res.redirect(authorizationUrl);
+  }
+
+  @Public()
+  @Get('google/callback')
+  async googleCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Query('error') error: string | undefined,
+    @Res() res: Response,
+  ) {
+    if (error) {
+      throw new UnauthorizedException(`Google OAuth failed: ${error}`);
+    }
+
+    const result = await this.authService.completeGoogleAuthorization(code, state);
+
+    const secure = process.env.NODE_ENV === 'production';
+    res.cookie('access_token', result.tokens.accessToken, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure,
+      path: '/',
+    });
+    res.cookie('refresh_token', result.tokens.refreshToken, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure,
+      path: '/',
+    });
+
+    return res.redirect(result.onboardingUrl);
+  }
+
+  @Public()
   @Post('login')
-  async login(@Body() dto: LoginDto, @Req() req: any, @Res({ passthrough: true }) res: Response) {
-    const ip = typeof req.headers['x-forwarded-for'] === 'string'
-      ? req.headers['x-forwarded-for'].split(',')[0]?.trim()
-      : req.ip;
-    const userAgent = req.headers['user-agent'];
-    const result = await this.auth.login(dto.email, dto.password, dto.totpCode, ip, userAgent);
-    res.setHeader('Set-Cookie', buildSessionCookie(CONTROL_PLANE_COOKIE_NAME, result.access_token, 60 * 60 * 12));
-    return { operator: result.operator };
+  login(@Body() dto: LoginDto) {
+    return this.authService.login(dto);
   }
 
-  @Post('logout')
-  @UseGuards(AuthGuard('jwt'))
-  async logout(@Req() req: any, @Res({ passthrough: true }) res: Response) {
-    const ip = typeof req.headers['x-forwarded-for'] === 'string'
-      ? req.headers['x-forwarded-for'].split(',')[0]?.trim()
-      : req.ip;
-    const userAgent = req.headers['user-agent'];
-    await this.auth.logout(req.user.sub, ip, userAgent);
-    res.setHeader('Set-Cookie', buildClearedCookie(CONTROL_PLANE_COOKIE_NAME));
-    return { success: true };
+  @Public()
+  @Post('refresh')
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refresh(dto.refreshToken);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get('me')
-  @UseGuards(AuthGuard('jwt'))
-  getMe(@Req() req: any) {
-    return this.auth.getMe(req.user.sub);
+  me(@CurrentUser() user: RequestUser) {
+    return this.authService.me(user);
   }
 
-  @Get('mfa/status')
-  @UseGuards(AuthGuard('jwt'), ControlPlaneRolesGuard)
-  @Roles(PLATFORM_OPERATOR_ROLE)
-  getMfaStatus(@Req() req: any) {
-    return this.auth.getOperatorMfaStatus(req.user.sub);
+  @Public()
+  @Get('invites/:token')
+  getInvite(@Param('token') token: string) {
+    return this.authService.getInvite(token);
   }
 
-  @Post('mfa/setup')
-  @UseGuards(AuthGuard('jwt'), ControlPlaneRolesGuard)
-  @Roles(PLATFORM_OPERATOR_ROLE)
-  setupMfa(@Req() req: any) {
-    return this.auth.createOperatorMfaSetup(req.user.sub);
-  }
-
-  @Post('mfa/enable')
-  @UseGuards(AuthGuard('jwt'), ControlPlaneRolesGuard)
-  @Roles(PLATFORM_OPERATOR_ROLE)
-  enableMfa(@Req() req: any, @Body() body: TotpDto) {
-    return this.auth.enableOperatorMfa(req.user.sub, body.code);
-  }
-
-  @Post('mfa/disable')
-  @UseGuards(AuthGuard('jwt'), ControlPlaneRolesGuard)
-  @Roles(PLATFORM_OPERATOR_ROLE)
-  disableMfa(@Req() req: any, @Body() body: TotpDto) {
-    return this.auth.disableOperatorMfa(req.user.sub, body.code);
+  @Public()
+  @Post('invites/:token/accept')
+  acceptInvite(@Param('token') token: string, @Body() dto: AcceptInviteDto) {
+    return this.authService.acceptInvite({
+      token,
+      name: dto.name,
+      password: dto.password,
+    });
   }
 }

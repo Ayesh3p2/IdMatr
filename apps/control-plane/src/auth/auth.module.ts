@@ -1,30 +1,35 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { AuthController } from './auth.controller.js';
-import { AuthService } from './auth.service.js';
-import { JwtStrategy } from './jwt.strategy.js';
-import { InternalAuthController } from './internal-auth.controller.js';
-import { SecurityModule } from '../security/security.module.js';
+import { IntegrationsModule } from '../integrations/integrations.module';
+import { AuthenticatedUserService } from './authenticated-user.service';
+import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
+import { JwtStrategy } from './jwt.strategy';
+import { RequestSecurityGuard } from './request-security.guard';
+import { MfaSetupGuard } from './mfa-setup.guard';
 
 @Module({
   imports: [
-    SecurityModule,
+    IntegrationsModule,
     PassportModule,
-    JwtModule.registerAsync({
-      useFactory: () => {
-        if (!process.env.CONTROL_PLANE_JWT_SECRET) {
-          throw new Error('CONTROL_PLANE_JWT_SECRET env var is required');
-        }
-        return {
-          secret: process.env.CONTROL_PLANE_JWT_SECRET,
-          signOptions: { expiresIn: '12h' },
-        };
-      },
+    JwtModule.register({
+      secret: process.env.JWT_SECRET ?? 'dev-secret',
+      signOptions: { expiresIn: process.env.JWT_EXPIRES_IN ?? '15m' },
     }),
   ],
-  controllers: [AuthController, InternalAuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  controllers: [AuthController],
+  providers: [
+    AuthService,
+    AuthenticatedUserService,
+    JwtStrategy,
+    MfaSetupGuard,
+    {
+      provide: APP_GUARD,
+      useClass: RequestSecurityGuard,
+    },
+  ],
+  exports: [AuthService, JwtModule, AuthenticatedUserService],
 })
 export class AuthModule {}

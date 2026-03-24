@@ -1,19 +1,14 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
-import { HealthService } from './health.service.js';
+import { Controller, Get } from '@nestjs/common';
+import { Public } from '../auth/public.decorator';
+import { HealthService } from './health.service';
 
-@Controller('control/system')
+@Controller('health')
 export class HealthController {
-  constructor(private health: HealthService) {}
+  constructor(private readonly healthService: HealthService) {}
 
-  @Get('health')
-  ping() {
-    return { status: 'ok', service: 'control-plane', timestamp: new Date().toISOString() };
-  }
-
-  @Get('overview')
-  @UseGuards(AuthGuard('jwt'))
-  getOverview() {
-    return this.health.getOverview();
+  @Public()
+  @Get()
+  async getHealth() {
+    return this.healthService.getHealth();
   }
 }

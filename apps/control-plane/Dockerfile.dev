@@ -1,0 +1,56 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache python3 make g++ openssl
+
+# Set memory limits for build
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
+# Copy package files
+COPY package*.json ./
+COPY tsconfig*.json ./
+
+# Install all dependencies (including dev dependencies for development)
+RUN npm install
+
+# Copy source code
+COPY . .
+
+# Generate Prisma client
+RUN npm install -g prisma@5.22.0 && npx prisma@5.22.0 generate
+
+# Build the application
+RUN npm run build
+
+# Development stage
+FROM node:20-alpine AS development
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apk add --no-cache dumb-init wget openssl
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001 -G nodejs
+
+# Copy built application
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/prisma ./prisma
+
+# Switch to non-root user
+USER nestjs
+
+# Expose ports
+EXPOSE 3010 9229
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3010/control/system/health || exit 1
+
+# Start the application
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["npm", "run", "start:dev"]

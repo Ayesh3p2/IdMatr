@@ -1,0 +1,104 @@
+name: Quality Gates
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  quality-check:
+    name: Quality Gate Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        working-directory: ./apps/control-plane
+        run: npm ci
+
+      - name: Run tests with coverage
+        working-directory: ./apps/control-plane
+        run: npm run test:cov
+
+      - name: Check coverage threshold
+        working-directory: ./apps/control-plane
+        run: |
+          COVERAGE_THRESHOLD=60
+          COVERAGE=$(npm run test:cov --silent | grep -oP 'All files[^|]*\|[^|]*%' | grep -o '[0-9.]*%' | head -1 | sed 's/%//')
+          echo "Current coverage: ${COVERAGE}%"
+          echo "Required coverage: ${COVERAGE_THRESHOLD}%"
+          
+          if (( $(echo "$COVERAGE >= $COVERAGE_THRESHOLD" | bc -l) )); then
+            echo "✅ Coverage threshold passed: ${COVERAGE}% >= ${COVERAGE_THRESHOLD}%"
+          else
+            echo "❌ Coverage threshold failed: ${COVERAGE}% < ${COVERAGE_THRESHOLD}%"
+            exit 1
+          fi
+
+      - name: Run security audit
+        working-directory: ./apps/control-plane
+        run: npm audit --audit-level moderate
+
+      - name: Check bundle size
+        working-directory: ./apps/control-plane
+        run: |
+          echo "Checking bundle size..."
+          # Add bundle size analysis here
+          MAX_BUNDLE_SIZE_MB=50
+          if [ -d "dist" ]; then
+            BUNDLE_SIZE=$(du -sm dist/ | cut -f1)
+            BUNDLE_SIZE_MB=$((BUNDLE_SIZE / 1024 / 1024))
+            echo "Bundle size: ${BUNDLE_SIZE_MB}MB"
+            echo "Max allowed: ${MAX_BUNDLE_SIZE_MB}MB"
+            
+            if [ $BUNDLE_SIZE_MB -le $MAX_BUNDLE_SIZE_MB ]; then
+              echo "✅ Bundle size check passed"
+            else
+              echo "❌ Bundle size too large: ${BUNDLE_SIZE_MB}MB > ${MAX_BUNDLE_SIZE_MB}MB"
+              exit 1
+            fi
+          fi
+
+      - name: Type check
+        working-directory: ./apps/control-plane
+        run: npx tsc --noEmit
+
+  sonar-scan:
+    name: SonarCloud Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        working-directory: ./apps/control-plane
+        run: npm ci
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=idmatr-control-plane
+            -Dsonar.organization=idmatr
+            -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.coverage.exclusions="**/*.test.ts,**/*.spec.ts,**/node_modules/**"

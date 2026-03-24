@@ -1,0 +1,217 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Global enums
+enum Role {
+  PLATFORM_ADMIN
+  TENANT_ADMIN
+  USER
+}
+
+enum TenantStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+enum RequestType {
+  ACCESS_REQUEST
+  ROLE_CHANGE
+  MFA_SETUP
+  ACCOUNT_RECOVERY
+}
+
+enum EventSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// Core Models
+model Tenant {
+  id          String        @id @default(uuid())
+  name        String
+  domain      String?       @unique
+  status      TenantStatus  @default(ACTIVE)
+  settings    Json?         @default("{}")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  users           TenantUser[]
+  invites         Invite[]
+  events          AuditEvent[]
+  requests        IdentityRequest[]
+  integrations    Integration[]
+
+  @@map("tenants")
+}
+
+model TenantUser {
+  id              String      @id @default(uuid())
+  tenantId        String
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  email           String
+  name            String
+  passwordHash    String      @map("password_hash")
+  role            Role        @default(USER)
+  status          UserStatus  @default(ACTIVE)
+  
+  // MFA
+  mfaEnabled      Boolean     @default(false) @map("mfa_enabled")
+  mfaSecret       String?     @map("mfa_secret")
+  
+  // Security
+  failedAttempts  Int         @default(0) @map("failed_attempts")
+  lockedUntil     DateTime?   @map("locked_until")
+  lastLoginAt     DateTime?   @map("last_login_at")
+  
+  // Timestamps
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  requests        IdentityRequest[]
+  events          AuditEvent[]
+
+  @@unique([tenantId, email])
+  @@index([email])
+  @@index([tenantId])
+  @@map("tenant_users")
+}
+
+model Invite {
+  id          String        @id @default(uuid())
+  tenantId    String
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  email       String
+  role        Role          @default(USER)
+  token       String        @unique
+  status      InviteStatus  @default(PENDING)
+  expiresAt   DateTime      @map("expires_at")
+  
+  // Metadata
+  invitedBy   String?       @map("invited_by")
+  acceptedBy  String?       @map("accepted_by")
+  acceptedAt  DateTime?     @map("accepted_at")
+  
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([token])
+  @@index([email])
+  @@index([tenantId])
+  @@map("invites")
+}
+
+model AuditEvent {
+  id          String          @id @default(uuid())
+  tenantId    String
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        TenantUser?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  action      String
+  resource    String
+  severity    EventSeverity   @default(LOW)
+  ipAddress   String?         @map("ip_address")
+  userAgent   String?         @map("user_agent")
+  metadata    Json?           @default("{}")
+  
+  createdAt   DateTime        @default(now())
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_events")
+}
+
+model IdentityRequest {
+  id              String          @id @default(uuid())
+  tenantId        String
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  requesterId     String
+  requester       TenantUser      @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+  
+  type            RequestType
+  title           String
+  description     String
+  status          RequestStatus   @default(PENDING)
+  
+  // Target info
+  targetUserId    String?         @map("target_user_id")
+  requestedRole   Role?           @map("requested_role")
+  
+  // Approval
+  approverId      String?         @map("approver_id")
+  approvedAt      DateTime?       @map("approved_at")
+  rejectionReason  String?        @map("rejection_reason")
+  
+  // Metadata
+  metadata        Json?           @default("{}")
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([tenantId])
+  @@index([requesterId])
+  @@index([status])
+  @@index([type])
+  @@map("identity_requests")
+}
+
+model Integration {
+  id          String      @id @default(uuid())
+  tenantId    String
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  name        String
+  provider    String
+  type        String
+  status      String      @default("ACTIVE")
+  config      Json        @default("{}")
+  
+  // Sync info
+  lastSyncAt  DateTime?   @map("last_sync_at")
+  syncStatus  String      @default("SUCCESS")
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([tenantId])
+  @@index([provider])
+  @@map("integrations")
+}
